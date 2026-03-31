@@ -38,6 +38,7 @@ dependencies:
   dio: ^5.9.2
   flutter_bloc: ^9.1.1
   shared_preferences: ^2.5.4
+  flutter_blue_plus_windows: 1.26.1
 
 dev_dependencies:
   flutter_test:

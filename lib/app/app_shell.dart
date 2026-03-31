@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/config/app_config.dart';
 import '../core/theme/app_theme.dart';
+import '../features/ble_receiver/presentation/pages/ble_receiver_page.dart';
 import '../features/discharge_works/presentation/pages/discharge_works_page.dart';
 import '../features/settings/presentation/pages/settings_page.dart';
 
@@ -24,13 +25,22 @@ class _AppShellState extends State<AppShell> {
       label: 'Discharge Works',
     ),
     _NavItem(
+      icon: Icons.bluetooth_outlined,
+      activeIcon: Icons.bluetooth,
+      label: 'BLE Receiver',
+    ),
+    _NavItem(
       icon: Icons.settings_outlined,
       activeIcon: Icons.settings,
       label: 'Paramètres',
     ),
   ];
 
-  static const List<Widget> _pages = [DischargeWorksPage(), SettingsPage()];
+  static const List<Widget> _pages = [
+    DischargeWorksPage(),
+    BleReceiverPage(),
+    SettingsPage(),
+  ];
 
   @override
   Widget build(BuildContext context) {
