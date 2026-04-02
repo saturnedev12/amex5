@@ -1,11 +1,13 @@
+import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
 import '../../../../core/error/exceptions.dart';
-import '../../../../core/network/dio_client.dart';
 import '../../domain/entities/discharge_entities.dart';
 
+@lazySingleton
 class DischargeWorksRemoteDataSource {
   static const String _endpoint = '/test_upload';
 
-  final DioClient _client;
+  final Dio _client;
 
   DischargeWorksRemoteDataSource(this._client);
 

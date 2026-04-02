@@ -3,11 +3,11 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:injectable/injectable.dart';
 
-import '../../../../core/config/app_config.dart';
 import '../../../../core/error/failures.dart';
-import '../../data/datasources/discharge_works_remote_datasource.dart';
-import '../../data/repositories/discharge_works_repository_impl.dart';
+
+
 import '../../domain/entities/discharge_entities.dart';
 import '../../domain/usecases/upload_discharge_works_usecase.dart';
 
@@ -59,9 +59,12 @@ class DischargeWorksError extends DischargeWorksState {
 
 // ── BLoC ──────────────────────────────────────────────────────────────────
 
+@injectable
 class DischargeWorksBloc
     extends Bloc<DischargeWorksEvent, DischargeWorksState> {
-  DischargeWorksBloc() : super(DischargeWorksInitial()) {
+  final UploadDischargeWorksUseCase useCase;
+
+  DischargeWorksBloc(this.useCase) : super(DischargeWorksInitial()) {
     on<PickFileEvent>(_onPickFile);
     on<UploadFileEvent>(_onUploadFile);
     on<ResetEvent>(_onReset);
@@ -69,12 +72,7 @@ class DischargeWorksBloc
 
   // ── Helpers ──
 
-  UploadDischargeWorksUseCase _buildUseCase() {
-    final client = AppConfig.instance.dioClient;
-    final dataSource = DischargeWorksRemoteDataSource(client);
-    final repository = DischargeWorksRepositoryImpl(dataSource);
-    return UploadDischargeWorksUseCase(repository);
-  }
+
 
   // ── Handlers ──
 
@@ -160,7 +158,6 @@ class DischargeWorksBloc
     final file = current.file;
     emit(DischargeWorksUploading(file));
 
-    final useCase = _buildUseCase();
     final result = await useCase(file.content);
 
     result.fold(

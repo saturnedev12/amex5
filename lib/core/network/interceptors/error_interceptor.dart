@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
 import '../../error/exceptions.dart';
 
 /// Intercepteur d'erreurs — transforme les [DioException] en [AppException]
 /// exploitables dans les couches métier (domain / data).
+@lazySingleton
 class ErrorInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {

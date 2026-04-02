@@ -1,8 +1,10 @@
+import 'package:injectable/injectable.dart';
 import '../../../../core/base/base_usecase.dart';
 import '../../../../core/utils/result.dart';
 import '../entities/discharge_entities.dart';
 import '../repositories/discharge_works_repository.dart';
 
+@lazySingleton
 class UploadDischargeWorksUseCase
     extends UseCase<DischargeUploadResult, Map<String, dynamic>> {
   final DischargeWorksRepository _repository;

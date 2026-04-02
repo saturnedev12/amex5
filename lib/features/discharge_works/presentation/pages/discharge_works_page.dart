@@ -8,6 +8,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../domain/entities/discharge_entities.dart';
 import '../bloc/discharge_works_bloc.dart';
 import '../widgets/discharge_widgets.dart';
+import '../../../../core/di/injection.dart';
 
 class DischargeWorksPage extends StatelessWidget {
   const DischargeWorksPage({super.key});
@@ -15,7 +16,7 @@ class DischargeWorksPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
-      create: (_) => DischargeWorksBloc(),
+      create: (context) => getIt<DischargeWorksBloc>(),
       child: const _DischargeWorksView(),
     );
   }

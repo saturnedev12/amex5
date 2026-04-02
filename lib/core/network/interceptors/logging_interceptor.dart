@@ -1,8 +1,10 @@
 import 'dart:developer' as developer;
 import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
 
 /// Intercepteur de journalisation — affiche les requêtes/réponses/erreurs
 /// dans la console. À désactiver en production via [enabled].
+@lazySingleton
 class LoggingInterceptor extends Interceptor {
   final bool enabled;
 

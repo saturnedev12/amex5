@@ -1,27 +1,19 @@
 import 'package:dio/dio.dart';
+import 'package:injectable/injectable.dart';
 import '../../constants/api_constants.dart';
+import 'token_provider.dart';
 
 /// Intercepteur d'authentification.
 ///
 /// Injecte le Bearer token dans chaque requête.
 /// Gère le refresh du token si le serveur retourne un 401.
+@lazySingleton
 class AuthInterceptor extends Interceptor {
-  /// Fournisseur de token — à remplacer par votre service de stockage
-  /// (par ex. SharedPreferences, flutter_secure_storage, etc.).
-  final Future<String?> Function() _getAccessToken;
-  final Future<String?> Function()? _getRefreshToken;
-  final Future<String?> Function(String refreshToken)? _onRefresh;
+  final TokenProvider _tokenProvider;
 
-  AuthInterceptor({
-    Future<String?> Function()? getAccessToken,
-    Future<String?> Function()? getRefreshToken,
-    Future<String?> Function(String refreshToken)? onRefresh,
-  }) : _getAccessToken = getAccessToken ?? _defaultGetToken,
-       _getRefreshToken = getRefreshToken,
-       _onRefresh = onRefresh;
+  AuthInterceptor(this._tokenProvider);
 
   /// Implémentation par défaut — retourne null (pas de token).
-  /// Remplacez-la via le constructeur.
   static Future<String?> _defaultGetToken() async => null;
 
   @override
@@ -29,7 +21,8 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    final token = await _getAccessToken();
+    final tokenFn = _tokenProvider.getAccessToken ?? _defaultGetToken;
+    final token = await tokenFn();
     if (token != null && token.isNotEmpty) {
       options.headers[ApiConstants.headerAuthorization] =
           '${ApiConstants.headerBearerPrefix}$token';
@@ -44,11 +37,11 @@ class AuthInterceptor extends Interceptor {
   ) async {
     // Tentative de refresh si 401 et refresh token disponible
     if (err.response?.statusCode == 401 &&
-        _getRefreshToken != null &&
-        _onRefresh != null) {
-      final refreshToken = await _getRefreshToken();
+        _tokenProvider.getRefreshToken != null &&
+        _tokenProvider.onRefresh != null) {
+      final refreshToken = await _tokenProvider.getRefreshToken!();
       if (refreshToken != null) {
-        final newToken = await _onRefresh(refreshToken);
+        final newToken = await _tokenProvider.onRefresh!(refreshToken);
         if (newToken != null) {
           // Rejoue la requête avec le nouveau token
           final opts = err.requestOptions;

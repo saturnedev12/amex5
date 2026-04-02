@@ -1,10 +1,10 @@
+import 'package:dio/dio.dart';
 import '../../../../core/error/exceptions.dart';
-import '../../../../core/network/dio_client.dart';
 import '../models/post_model.dart';
 
-/// Source de données distante — communique uniquement via [DioClient].
+/// Source de données distante — communique uniquement via [Dio].
 class PostRemoteDataSource {
-  final DioClient _client;
+  final Dio _client;
 
   PostRemoteDataSource(this._client);
 

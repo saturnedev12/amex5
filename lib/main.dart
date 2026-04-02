@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
-import 'app/app_shell.dart';
+
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
+import 'core/router/app_router.dart';
+import 'core/di/injection.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await configureDependencies();
 
   await AppConfig.init(
     // TODO : branchez vos callbacks de token ici :
@@ -22,11 +26,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Amex5',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
-      home: const AppShell(),
+      routerConfig: appRouter,
     );
   }
 }

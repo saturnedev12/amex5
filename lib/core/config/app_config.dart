@@ -1,8 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 import '../constants/api_constants.dart';
-import '../network/dio_client.dart';
-import '../network/interceptors/auth_interceptor.dart';
+import '../network/interceptors/token_provider.dart';
+import '../di/injection.dart';
 
 /// Gestion de la configuration runtime de l'application.
 ///
@@ -23,10 +24,8 @@ class AppConfig extends ChangeNotifier {
   }
 
   late SharedPreferences _prefs;
-  late DioClient _dioClient;
   String _baseUrl = ApiConstants.baseUrl;
 
-  DioClient get dioClient => _dioClient;
   String get baseUrl => _baseUrl;
 
   static Future<AppConfig> init({
@@ -43,18 +42,18 @@ class AppConfig extends ChangeNotifier {
     config._baseUrl =
         config._prefs.getString(_baseUrlKey) ?? ApiConstants.baseUrl;
 
-    // Création initiale du DioClient
-    config._dioClient = config._buildClient(
-      getAccessToken: getAccessToken,
-      getRefreshToken: getRefreshToken,
-      onRefresh: onRefresh,
-    );
+    // Mise à jour de Dio et TokenProvider via GetIt
+    getIt<Dio>().options.baseUrl = config._baseUrl;
+    final tokenProvider = getIt<TokenProvider>();
+    tokenProvider.getAccessToken = getAccessToken;
+    tokenProvider.getRefreshToken = getRefreshToken;
+    tokenProvider.onRefresh = onRefresh;
 
     _instance = config;
     return config;
   }
 
-  /// Met à jour le baseUrl, recrée le DioClient et notifie les listeners.
+  /// Met à jour le baseUrl, modifie Dio injecté et notifie les listeners.
   Future<void> setBaseUrl(
     String url, {
     Future<String?> Function()? getAccessToken,
@@ -70,27 +69,17 @@ class AppConfig extends ChangeNotifier {
     _baseUrl = trimmed;
     await _prefs.setString(_baseUrlKey, _baseUrl);
 
-    _dioClient = _buildClient(
-      getAccessToken: getAccessToken,
-      getRefreshToken: getRefreshToken,
-      onRefresh: onRefresh,
-    );
+    getIt<Dio>().options.baseUrl = _baseUrl;
+
+    if (getAccessToken != null || getRefreshToken != null || onRefresh != null) {
+      final tokenProvider = getIt<TokenProvider>();
+      if (getAccessToken != null) tokenProvider.getAccessToken = getAccessToken;
+      if (getRefreshToken != null) tokenProvider.getRefreshToken = getRefreshToken;
+      if (onRefresh != null) tokenProvider.onRefresh = onRefresh;
+    }
 
     notifyListeners();
   }
-
-  DioClient _buildClient({
-    Future<String?> Function()? getAccessToken,
-    Future<String?> Function()? getRefreshToken,
-    Future<String?> Function(String)? onRefresh,
-  }) => DioClient(
-    baseUrl: _baseUrl,
-    authInterceptor: AuthInterceptor(
-      getAccessToken: getAccessToken,
-      getRefreshToken: getRefreshToken,
-      onRefresh: onRefresh,
-    ),
-  );
 
   static void reset() => _instance = null;
 }
