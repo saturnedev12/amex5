@@ -14,8 +14,6 @@ import 'package:amex5/core/network/dio_config.dart' as _i604;
 import 'package:amex5/core/network/interceptors/auth_interceptor.dart' as _i660;
 import 'package:amex5/core/network/interceptors/error_interceptor.dart'
     as _i1073;
-import 'package:amex5/core/network/interceptors/logging_interceptor.dart'
-    as _i715;
 import 'package:amex5/core/network/interceptors/token_provider.dart' as _i929;
 import 'package:amex5/features/authentification/data/auth_repository.dart'
     as _i521;
@@ -46,9 +44,6 @@ extension GetItInjectableX on _i174.GetIt {
     gh.singleton<_i553.IsarConfig>(() => _i553.IsarConfig());
     gh.singleton<_i929.TokenProvider>(() => _i929.TokenProvider());
     gh.lazySingleton<_i1073.ErrorInterceptor>(() => _i1073.ErrorInterceptor());
-    gh.lazySingleton<_i715.LoggingInterceptor>(
-      () => _i715.LoggingInterceptor(enabled: gh<bool>()),
-    );
     gh.lazySingleton<_i660.AuthInterceptor>(
       () => _i660.AuthInterceptor(gh<_i929.TokenProvider>()),
     );
@@ -56,7 +51,6 @@ extension GetItInjectableX on _i174.GetIt {
       () => dioConfig.dio(
         gh<_i660.AuthInterceptor>(),
         gh<_i1073.ErrorInterceptor>(),
-        gh<_i715.LoggingInterceptor>(),
       ),
     );
     gh.lazySingleton<_i345.DischargeWorksRemoteDataSource>(

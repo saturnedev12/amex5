@@ -1,9 +1,10 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:injectable/injectable.dart';
+import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 import 'package:amex5/core/constants/api_constants.dart';
 import 'package:amex5/core/network/interceptors/auth_interceptor.dart';
 import 'package:amex5/core/network/interceptors/error_interceptor.dart';
-import 'package:amex5/core/network/interceptors/logging_interceptor.dart';
 
 @module
 abstract class DioConfig {
@@ -11,7 +12,6 @@ abstract class DioConfig {
   Dio dio(
     AuthInterceptor authInterceptor,
     ErrorInterceptor errorInterceptor,
-    LoggingInterceptor loggingInterceptor,
   ) {
     final dio = Dio(
       BaseOptions(
@@ -27,7 +27,15 @@ abstract class DioConfig {
       ),
     );
     dio.interceptors.addAll([
-      loggingInterceptor,
+      if (kDebugMode)
+        PrettyDioLogger(
+          requestHeader: true,
+          requestBody: true,
+          responseBody: true,
+          responseHeader: false,
+          error: true,
+          compact: true,
+        ),
       authInterceptor,
       errorInterceptor,
     ]);
