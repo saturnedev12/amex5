@@ -1,32 +1,33 @@
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 import '../../constants/api_constants.dart';
+import '../../session/session_manager.dart';
 import 'token_provider.dart';
 
 /// Intercepteur d'authentification.
 ///
-/// Injecte le Bearer token dans chaque requête.
-/// Gère le refresh du token si le serveur retourne un 401.
+/// Injecte le Bearer token et X-device dans chaque requête.
+/// Détecte 401 EXPIRED_TOKEN et déclenche la redirection vers login.
 @lazySingleton
 class AuthInterceptor extends Interceptor {
   final TokenProvider _tokenProvider;
+  final SessionManager _sessionManager;
 
-  AuthInterceptor(this._tokenProvider);
+  /// Callback set by the app to navigate to login on token expiry.
+  static void Function()? onTokenExpired;
 
-  /// Implémentation par défaut — retourne null (pas de token).
-  static Future<String?> _defaultGetToken() async => null;
+  AuthInterceptor(this._tokenProvider, this._sessionManager);
 
   @override
   Future<void> onRequest(
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    final tokenFn = _tokenProvider.getAccessToken ?? _defaultGetToken;
-    final token = await tokenFn();
+    final token = _sessionManager.token;
     if (token != null && token.isNotEmpty) {
-      options.headers[ApiConstants.headerAuthorization] =
-          '${ApiConstants.headerBearerPrefix}$token';
+      options.headers[ApiConstants.headerAuthorization] = token;
     }
+    options.headers['X-device'] = _sessionManager.xDevice;
     handler.next(options);
   }
 
@@ -35,26 +36,17 @@ class AuthInterceptor extends Interceptor {
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    // Tentative de refresh si 401 et refresh token disponible
-    if (err.response?.statusCode == 401 &&
-        _tokenProvider.getRefreshToken != null &&
-        _tokenProvider.onRefresh != null) {
-      final refreshToken = await _tokenProvider.getRefreshToken!();
-      if (refreshToken != null) {
-        final newToken = await _tokenProvider.onRefresh!(refreshToken);
-        if (newToken != null) {
-          // Rejoue la requête avec le nouveau token
-          final opts = err.requestOptions;
-          opts.headers[ApiConstants.headerAuthorization] =
-              '${ApiConstants.headerBearerPrefix}$newToken';
-          try {
-            final dio = Dio();
-            final response = await dio.fetch(opts);
-            return handler.resolve(response);
-          } catch (e) {
-            // Le retry a échoué → on propage l'erreur
-          }
-        }
+    if (err.response?.statusCode == 401) {
+      final body = err.response?.data;
+      final isExpired =
+          body is String && body.contains('EXPIRED_TOKEN') ||
+          (body is Map && body.toString().contains('EXPIRED_TOKEN'));
+
+      if (isExpired) {
+        await _sessionManager.clear();
+        onTokenExpired?.call();
+        handler.next(err);
+        return;
       }
     }
     handler.next(err);

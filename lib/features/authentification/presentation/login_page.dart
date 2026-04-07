@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:amex5/core/di/injection.dart';
+import 'package:amex5/core/session/session_manager.dart';
 import 'package:amex5/core/theme/app_theme.dart';
 import 'login_cubit.dart';
 
@@ -45,11 +46,14 @@ class _LoginViewState extends State<LoginView> {
       body: BlocListener<LoginCubit, AuthState>(
         listener: (context, state) {
           if (state is AuthAuthenticated) {
-            context.go('/home');
+            final session = getIt<SessionManager>();
+            final redirect = session.pendingRedirect;
+            session.pendingRedirect = null;
+            context.go(redirect ?? '/home');
           } else if (state is AuthError) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(state.message)),
-            );
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(state.message)));
           }
         },
         child: Row(
@@ -148,7 +152,9 @@ class _LoginViewState extends State<LoginView> {
                                     width: 56,
                                     height: 56,
                                     decoration: BoxDecoration(
-                                      color: AppColors.primary.withValues(alpha: 0.15),
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.15,
+                                      ),
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                     child: const Icon(
@@ -162,7 +168,9 @@ class _LoginViewState extends State<LoginView> {
                               ],
                               Text(
                                 'Connexion',
-                                style: AppTextStyles.displayLarge.copyWith(fontSize: 24),
+                                style: AppTextStyles.displayLarge.copyWith(
+                                  fontSize: 24,
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Text(
@@ -233,7 +241,9 @@ class _LoginViewState extends State<LoginView> {
                               SizedBox(
                                 height: 48,
                                 child: ElevatedButton(
-                                  onPressed: isLoading ? null : () => _submit(context),
+                                  onPressed: isLoading
+                                      ? null
+                                      : () => _submit(context),
                                   child: isLoading
                                       ? const SizedBox(
                                           width: 22,

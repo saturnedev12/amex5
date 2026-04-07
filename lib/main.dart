@@ -1,22 +1,25 @@
 import 'package:flutter/material.dart';
 
-
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'core/di/injection.dart';
+import 'core/network/interceptors/auth_interceptor.dart';
+import 'core/session/session_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await configureDependencies();
 
-  await AppConfig.init(
-    // TODO : branchez vos callbacks de token ici :
-    // getAccessToken: () async => await SecureStorage.read('access_token'),
-    // getRefreshToken: () async => await SecureStorage.read('refresh_token'),
-    // onRefresh: (rt) async => await AuthService.refreshToken(rt),
-  );
+  // Wire token expiry → redirect to login
+  AuthInterceptor.onTokenExpired = () {
+    final session = getIt<SessionManager>();
+    session.pendingRedirect = '/home';
+    appRouter.go('/login');
+  };
+
+  await AppConfig.init();
 
   runApp(const MyApp());
 }

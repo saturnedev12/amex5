@@ -14,7 +14,18 @@ import 'package:amex5/core/network/dio_config.dart' as _i604;
 import 'package:amex5/core/network/interceptors/auth_interceptor.dart' as _i660;
 import 'package:amex5/core/network/interceptors/error_interceptor.dart'
     as _i1073;
+import 'package:amex5/core/network/interceptors/logging_interceptor.dart'
+    as _i715;
 import 'package:amex5/core/network/interceptors/token_provider.dart' as _i929;
+import 'package:amex5/core/session/session_manager.dart' as _i714;
+import 'package:amex5/features/agent_works/data/datasources/agent_works_remote_datasource.dart'
+    as _i285;
+import 'package:amex5/features/agent_works/data/repositories/agent_works_repository_impl.dart'
+    as _i861;
+import 'package:amex5/features/agent_works/domain/repositories/agent_works_repository.dart'
+    as _i806;
+import 'package:amex5/features/agent_works/presentation/bloc/agent_works_bloc.dart'
+    as _i184;
 import 'package:amex5/features/authentification/data/auth_repository.dart'
     as _i521;
 import 'package:amex5/features/authentification/presentation/login_cubit.dart'
@@ -43,9 +54,16 @@ extension GetItInjectableX on _i174.GetIt {
     final dioConfig = _$DioConfig();
     gh.singleton<_i553.IsarConfig>(() => _i553.IsarConfig());
     gh.singleton<_i929.TokenProvider>(() => _i929.TokenProvider());
+    gh.singleton<_i714.SessionManager>(() => _i714.SessionManager());
     gh.lazySingleton<_i1073.ErrorInterceptor>(() => _i1073.ErrorInterceptor());
+    gh.lazySingleton<_i715.LoggingInterceptor>(
+      () => _i715.LoggingInterceptor(enabled: gh<bool>()),
+    );
     gh.lazySingleton<_i660.AuthInterceptor>(
-      () => _i660.AuthInterceptor(gh<_i929.TokenProvider>()),
+      () => _i660.AuthInterceptor(
+        gh<_i929.TokenProvider>(),
+        gh<_i714.SessionManager>(),
+      ),
     );
     gh.lazySingleton<_i361.Dio>(
       () => dioConfig.dio(
@@ -56,6 +74,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i345.DischargeWorksRemoteDataSource>(
       () => _i345.DischargeWorksRemoteDataSource(gh<_i361.Dio>()),
     );
+    gh.lazySingleton<_i285.AgentWorksRemoteDataSource>(
+      () => _i285.AgentWorksRemoteDataSource(gh<_i361.Dio>()),
+    );
     gh.lazySingleton<_i521.AuthRepository>(
       () => _i521.AuthRepository(gh<_i361.Dio>()),
     );
@@ -64,13 +85,27 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i345.DischargeWorksRemoteDataSource>(),
       ),
     );
+    gh.factory<_i468.LoginCubit>(
+      () => _i468.LoginCubit(
+        gh<_i521.AuthRepository>(),
+        gh<_i714.SessionManager>(),
+      ),
+    );
+    gh.lazySingleton<_i806.AgentWorksRepository>(
+      () => _i861.AgentWorksRepositoryImpl(
+        gh<_i285.AgentWorksRemoteDataSource>(),
+      ),
+    );
+    gh.factory<_i184.AgentWorksBloc>(
+      () => _i184.AgentWorksBloc(
+        gh<_i806.AgentWorksRepository>(),
+        gh<_i714.SessionManager>(),
+      ),
+    );
     gh.lazySingleton<_i494.UploadDischargeWorksUseCase>(
       () => _i494.UploadDischargeWorksUseCase(
         gh<_i838.DischargeWorksRepository>(),
       ),
-    );
-    gh.factory<_i468.LoginCubit>(
-      () => _i468.LoginCubit(gh<_i521.AuthRepository>()),
     );
     gh.factory<_i881.DischargeWorksBloc>(
       () => _i881.DischargeWorksBloc(gh<_i494.UploadDischargeWorksUseCase>()),

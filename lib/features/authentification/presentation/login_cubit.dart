@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
+import 'package:amex5/core/session/session_manager.dart';
 import 'package:amex5/features/authentification/data/auth_repository.dart';
 import 'package:amex5/features/authentification/data/models/login_body_model.dart';
 import 'package:amex5/features/authentification/data/models/login_response_model.dart';
@@ -23,8 +24,9 @@ class AuthError extends AuthState {
 @injectable
 class LoginCubit extends Cubit<AuthState> {
   final AuthRepository _repository;
+  final SessionManager _sessionManager;
 
-  LoginCubit(this._repository) : super(AuthInitial());
+  LoginCubit(this._repository, this._sessionManager) : super(AuthInitial());
 
   Future<void> login(String username, String password) async {
     emit(AuthLoading());
@@ -33,8 +35,24 @@ class LoginCubit extends Cubit<AuthState> {
         login: username,
         pwd: password,
         checkCode: "DUMMY_CODE",
+        tokenRequired: true,
+        authsRequired: true,
+        eamDocRequired: true,
+        userAsPerson: false,
+        remoteRequestDate: "2024-12-16T20:07:11+0000",
+        appData: {
+          "syncRequired": true,
+          "scopes": ["WMWO_MOBILE"],
+        },
       );
       final response = await _repository.login(body: body);
+
+      // Save token + full login response JSON locally
+      await _sessionManager.saveLoginData(
+        token: response.token ?? '',
+        loginResponseJson: response.toJson(),
+      );
+
       emit(AuthAuthenticated(response));
     } catch (e) {
       emit(AuthError('Erreur de connexion : $e'));

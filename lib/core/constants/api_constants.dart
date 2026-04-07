@@ -2,7 +2,7 @@ class ApiConstants {
   ApiConstants._();
 
   // Base URL — à modifier selon votre environnement
-  static const String baseUrl = 'https://api.example.com';
+  static const String baseUrl = 'http://192.168.1.7:8087';
 
   // Timeouts
   static const int connectTimeoutMs = 30000;

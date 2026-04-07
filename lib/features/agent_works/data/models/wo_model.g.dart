@@ -1,0 +1,91 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
+part of 'wo_model.dart';
+
+// **************************************************************************
+// JsonSerializableGenerator
+// **************************************************************************
+
+WoModel _$WoModelFromJson(Map<String, dynamic> json) => WoModel(
+  woCode: json['woCode'] as String?,
+  act: (json['act'] as num?)?.toInt(),
+  note: json['note'] as String?,
+  trade: json['trade'] as String?,
+  range: json['range'] as String?,
+  rangeDesc: json['rangeDesc'] as String?,
+  rangeRev: (json['rangeRev'] as num?)?.toInt(),
+  persons: (json['persons'] as num?)?.toInt(),
+  est: (json['est'] as num?)?.toDouble(),
+  matlist: json['matlist'] as String?,
+  matlrev: (json['matlrev'] as num?)?.toInt(),
+  workMan: json['workMan'] as String?,
+  completed: json['completed'] as bool?,
+  heldBy: json['heldBy'] as String?,
+  device: json['device'] as String?,
+  heldAt: json['heldAt'] as String?,
+  scheduldedStart: json['scheduldedStart'] as String?,
+  start: json['start'] as String?,
+  end: json['end'] as String?,
+  specialSafetyInstrucutions: json['specialSafetyInstrucutions'] as String?,
+  lastsaved: json['lastsaved'] as String?,
+  woDesc: json['woDesc'] as String?,
+  org: json['org'] as String?,
+  object: json['object'] as String?,
+  objectOrg: json['objectOrg'] as String?,
+  woStatus: json['woStatus'] as String?,
+  woTarget: json['woTarget'] as String?,
+  woPriority: json['woPriority'] as String?,
+  woStartDate: json['woStartDate'] as String?,
+  woCompletedDate: json['woCompletedDate'] as String?,
+  ppm: json['ppm'] as String?,
+  ppmrev: (json['ppmrev'] as num?)?.toInt(),
+  objectDesc: json['objectDesc'] as String?,
+  wmName: json['wmName'] as String?,
+  scheduledStartHour: json['scheduledStartHour'] as String?,
+  checkListItems:
+      (json['checkListItems'] as List<dynamic>?)
+          ?.map((e) => TaskModel.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      [],
+  scheduledEnd: json['scheduledEnd'] as String?,
+);
+
+Map<String, dynamic> _$WoModelToJson(WoModel instance) => <String, dynamic>{
+  'woCode': instance.woCode,
+  'act': instance.act,
+  'note': instance.note,
+  'trade': instance.trade,
+  'range': instance.range,
+  'rangeDesc': instance.rangeDesc,
+  'rangeRev': instance.rangeRev,
+  'persons': instance.persons,
+  'est': instance.est,
+  'matlist': instance.matlist,
+  'matlrev': instance.matlrev,
+  'workMan': instance.workMan,
+  'completed': instance.completed,
+  'heldBy': instance.heldBy,
+  'device': instance.device,
+  'heldAt': instance.heldAt,
+  'scheduldedStart': instance.scheduldedStart,
+  'start': instance.start,
+  'end': instance.end,
+  'specialSafetyInstrucutions': instance.specialSafetyInstrucutions,
+  'lastsaved': instance.lastsaved,
+  'woDesc': instance.woDesc,
+  'org': instance.org,
+  'object': instance.object,
+  'objectOrg': instance.objectOrg,
+  'woStatus': instance.woStatus,
+  'woTarget': instance.woTarget,
+  'woPriority': instance.woPriority,
+  'woStartDate': instance.woStartDate,
+  'woCompletedDate': instance.woCompletedDate,
+  'ppm': instance.ppm,
+  'ppmrev': instance.ppmrev,
+  'objectDesc': instance.objectDesc,
+  'wmName': instance.wmName,
+  'scheduledStartHour': instance.scheduledStartHour,
+  'checkListItems': instance.checkListItems,
+  'scheduledEnd': instance.scheduledEnd,
+};

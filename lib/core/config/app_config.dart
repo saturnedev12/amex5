@@ -1,8 +1,8 @@
+import 'package:amex5/core/network/interceptors/token_provider.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import '../constants/api_constants.dart';
-import '../network/interceptors/token_provider.dart';
 import '../di/injection.dart';
 
 /// Gestion de la configuration runtime de l'application.
@@ -42,12 +42,8 @@ class AppConfig extends ChangeNotifier {
     config._baseUrl =
         config._prefs.getString(_baseUrlKey) ?? ApiConstants.baseUrl;
 
-    // Mise à jour de Dio et TokenProvider via GetIt
+    // Mise à jour de Dio via GetIt
     getIt<Dio>().options.baseUrl = config._baseUrl;
-    final tokenProvider = getIt<TokenProvider>();
-    tokenProvider.getAccessToken = getAccessToken;
-    tokenProvider.getRefreshToken = getRefreshToken;
-    tokenProvider.onRefresh = onRefresh;
 
     _instance = config;
     return config;
@@ -71,10 +67,13 @@ class AppConfig extends ChangeNotifier {
 
     getIt<Dio>().options.baseUrl = _baseUrl;
 
-    if (getAccessToken != null || getRefreshToken != null || onRefresh != null) {
+    if (getAccessToken != null ||
+        getRefreshToken != null ||
+        onRefresh != null) {
       final tokenProvider = getIt<TokenProvider>();
       if (getAccessToken != null) tokenProvider.getAccessToken = getAccessToken;
-      if (getRefreshToken != null) tokenProvider.getRefreshToken = getRefreshToken;
+      if (getRefreshToken != null)
+        tokenProvider.getRefreshToken = getRefreshToken;
       if (onRefresh != null) tokenProvider.onRefresh = onRefresh;
     }
 

@@ -46,6 +46,7 @@ dependencies:
   path_provider: ^2.1.5
   get_it: ^9.2.1
   injectable: ^2.7.1+4
+  pretty_dio_logger: ^1.4.0
 
 dev_dependencies:
   flutter_test:
