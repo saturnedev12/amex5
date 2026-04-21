@@ -24,6 +24,10 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>$(PRODUCT_COPYRIGHT)</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Cette application utilise le Bluetooth pour communiquer avec des appareils à proximité.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Cette application utilise le Bluetooth pour communiquer avec des périphériques.</string>
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>

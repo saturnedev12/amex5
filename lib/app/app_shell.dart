@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/config/app_config.dart';
 import '../core/theme/app_theme.dart';
 import '../features/agent_works/presentation/pages/agent_works_page.dart';
+import '../features/ble_receive_works/presentation/pages/ble_receive_works_page.dart';
 import '../features/ble_receiver/presentation/pages/ble_receiver_page.dart';
 import '../features/discharge_works/presentation/pages/discharge_works_page.dart';
 import '../features/settings/presentation/pages/settings_page.dart';
@@ -28,7 +29,12 @@ class _AppShellState extends State<AppShell> {
     _NavItem(
       icon: Icons.work_outline,
       activeIcon: Icons.work,
-      label: 'Travaux Agents',
+      label: 'Chargement travaux',
+    ),
+    _NavItem(
+      icon: Icons.work_outline,
+      activeIcon: Icons.work,
+      label: 'Déchargement travaux',
     ),
     _NavItem(
       icon: Icons.bluetooth_outlined,
@@ -45,6 +51,7 @@ class _AppShellState extends State<AppShell> {
   static const List<Widget> _pages = [
     DischargeWorksPage(),
     AgentWorksPage(),
+    BleReceiveWorksPage(),
     BleReceiverPage(),
     SettingsPage(),
   ];

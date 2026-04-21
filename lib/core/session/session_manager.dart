@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'package:bcrypt/bcrypt.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:injectable/injectable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,10 +11,12 @@ class SessionManager extends ChangeNotifier {
   static const String _tokenKey = 'session_token';
   static const String _loginResponseKey = 'session_login_response';
   static const String _deviceHeader = 'session_x_device';
+  static const String _passwordKey = 'session_password';
 
   SharedPreferences? _prefs;
 
   String? _token;
+  String? _passwordHash;
   Map<String, dynamic>? _loginResponse;
   String _xDevice = 'web-id';
 
@@ -20,6 +24,7 @@ class SessionManager extends ChangeNotifier {
   Map<String, dynamic>? get loginResponse => _loginResponse;
   String get xDevice => _xDevice;
   bool get isLoggedIn => _token != null && _token!.isNotEmpty;
+  String? get passwordHash => _passwordHash;
 
   /// Path to redirect to after re-login (when token expires).
   String? pendingRedirect;
@@ -32,12 +37,14 @@ class SessionManager extends ChangeNotifier {
     if (raw != null) {
       _loginResponse = json.decode(raw) as Map<String, dynamic>;
     }
+    _passwordHash = _prefs?.getString(_passwordKey);
   }
 
   /// Save login response: persists token + full JSON.
   Future<void> saveLoginData({
     required String token,
     required Map<String, dynamic> loginResponseJson,
+    required String password,
     String? xDevice,
   }) async {
     _token = token;
@@ -46,6 +53,9 @@ class SessionManager extends ChangeNotifier {
 
     await _prefs?.setString(_tokenKey, token);
     await _prefs?.setString(_loginResponseKey, json.encode(loginResponseJson));
+    final salt = dotenv.env['BCRYPT_SALT']!;
+    _passwordHash = BCrypt.hashpw(password, salt);
+    await _prefs?.setString(_passwordKey, _passwordHash!);
     if (xDevice != null) {
       await _prefs?.setString(_deviceHeader, xDevice);
     }
@@ -58,6 +68,7 @@ class SessionManager extends ChangeNotifier {
     _loginResponse = null;
     await _prefs?.remove(_tokenKey);
     await _prefs?.remove(_loginResponseKey);
+    await _prefs?.remove(_passwordKey);
     notifyListeners();
   }
 }

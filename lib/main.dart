@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
@@ -11,7 +12,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await configureDependencies();
-
+  await dotenv.load(fileName: ".env");
   // Wire token expiry → redirect to login
   AuthInterceptor.onTokenExpired = () {
     final session = getIt<SessionManager>();

@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:injectable/injectable.dart';
 import 'package:amex5/core/session/session_manager.dart';
@@ -51,10 +53,12 @@ class LoginCubit extends Cubit<AuthState> {
       await _sessionManager.saveLoginData(
         token: response.token ?? '',
         loginResponseJson: response.toJson(),
+        password: password,
       );
 
       emit(AuthAuthenticated(response));
     } catch (e) {
+      inspect(e);
       emit(AuthError('Erreur de connexion : $e'));
     }
   }

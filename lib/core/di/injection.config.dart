@@ -30,6 +30,14 @@ import 'package:amex5/features/authentification/data/auth_repository.dart'
     as _i521;
 import 'package:amex5/features/authentification/presentation/login_cubit.dart'
     as _i468;
+import 'package:amex5/features/ble_receive_works/data/datasources/ble_receive_remote_datasource.dart'
+    as _i998;
+import 'package:amex5/features/ble_receive_works/data/repositories/ble_receive_works_repository_impl.dart'
+    as _i252;
+import 'package:amex5/features/ble_receive_works/domain/repositories/ble_receive_works_repository.dart'
+    as _i74;
+import 'package:amex5/features/ble_receive_works/presentation/bloc/ble_receive_works_bloc.dart'
+    as _i409;
 import 'package:amex5/features/discharge_works/data/datasources/discharge_works_remote_datasource.dart'
     as _i345;
 import 'package:amex5/features/discharge_works/data/repositories/discharge_works_repository_impl.dart'
@@ -80,6 +88,9 @@ extension GetItInjectableX on _i174.GetIt {
     gh.lazySingleton<_i521.AuthRepository>(
       () => _i521.AuthRepository(gh<_i361.Dio>()),
     );
+    gh.lazySingleton<_i998.BleReceiveRemoteDataSource>(
+      () => _i998.BleReceiveRemoteDataSource(gh<_i361.Dio>()),
+    );
     gh.lazySingleton<_i838.DischargeWorksRepository>(
       () => _i551.DischargeWorksRepositoryImpl(
         gh<_i345.DischargeWorksRemoteDataSource>(),
@@ -106,6 +117,14 @@ extension GetItInjectableX on _i174.GetIt {
       () => _i494.UploadDischargeWorksUseCase(
         gh<_i838.DischargeWorksRepository>(),
       ),
+    );
+    gh.lazySingleton<_i74.BleReceiveWorksRepository>(
+      () => _i252.BleReceiveWorksRepositoryImpl(
+        gh<_i998.BleReceiveRemoteDataSource>(),
+      ),
+    );
+    gh.factory<_i409.BleReceiveWorksBloc>(
+      () => _i409.BleReceiveWorksBloc(gh<_i74.BleReceiveWorksRepository>()),
     );
     gh.factory<_i881.DischargeWorksBloc>(
       () => _i881.DischargeWorksBloc(gh<_i494.UploadDischargeWorksUseCase>()),

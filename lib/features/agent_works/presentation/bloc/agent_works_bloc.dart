@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -251,7 +252,7 @@ class AgentWorksBloc extends Bloc<AgentWorksEvent, AgentWorksState> {
     try {
       final payload = _buildFullPayload();
       final jsonStr = const JsonEncoder.withIndent('  ').convert(payload);
-      debugPrint(jsonStr);
+      //debugPrint(jsonStr);
       final result = await FilePicker.platform.saveFile(
         dialogTitle: 'Enregistrer les données',
         fileName: 'agent_works_${DateTime.now().millisecondsSinceEpoch}.json',
@@ -264,6 +265,7 @@ class AgentWorksBloc extends Bloc<AgentWorksEvent, AgentWorksState> {
         emit(state.copyWith(successMessage: 'Fichier enregistré: $result'));
       }
     } catch (e) {
+      inspect(e);
       emit(state.copyWith(error: 'Erreur lors du téléchargement: $e'));
     }
   }
@@ -289,12 +291,13 @@ class AgentWorksBloc extends Bloc<AgentWorksEvent, AgentWorksState> {
       return woJson;
     }).toList();
 
-    // Deduplicated checkItems
-    final checkItems = state.allCheckItems.map((t) => t.toJson()).toList();
+    // // Deduplicated checkItems
+    // final checkItems = state.allCheckItems.map((t) => t.toJson()).toList();
 
     return {
       'LOGGIN': _sessionManager.loginResponse ?? {},
-      'UPPLOAD_WORK': {'wo': worksPayload, 'checkItems': checkItems},
+      'PASSWORD': _sessionManager.passwordHash ?? '',
+      'UPPLOAD_WORK': {'wo': worksPayload, 'checkItems': []},
     };
   }
 
