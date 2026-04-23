@@ -10,4 +10,11 @@ class UserIsarModel {
   String? username;
 
   String? token;
+  String? systemToken;
+  String? userGroup;
+  String? profile;
+  bool? globalAdmin;
+  String? name;
+  String? employeeCode;
+  String? loginResponseJson;
 }

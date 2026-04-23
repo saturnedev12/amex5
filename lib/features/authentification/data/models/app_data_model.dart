@@ -6,10 +6,14 @@ part 'app_data_model.g.dart';
 @JsonSerializable()
 class AppDataModel {
   final String? nextSyncDate;
+  final double? syncPeriod;
+  final Map<String, dynamic>? defaultParams;
   final DataUnitMap? dataUnitMap;
   
   AppDataModel({
     this.nextSyncDate,
+    this.syncPeriod,
+    this.defaultParams,
     this.dataUnitMap,
   });
 

@@ -4,15 +4,17 @@ part 'user_data.g.dart';
 
 @JsonSerializable()
 class UserData {
+  final String? code;
   final String employeeCode;
   final String name;
   final DateTime? lastsaved;
   final List<String>? trades;
 
   UserData({
+    this.code,
     this.employeeCode = "",
     this.name = "",
-    required this.lastsaved,
+    this.lastsaved,
     this.trades = const [],
   });
 

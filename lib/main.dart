@@ -11,8 +11,8 @@ import 'core/session/session_manager.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await configureDependencies();
   await dotenv.load(fileName: ".env");
+  await configureDependencies();
   // Wire token expiry → redirect to login
   AuthInterceptor.onTokenExpired = () {
     final session = getIt<SessionManager>();

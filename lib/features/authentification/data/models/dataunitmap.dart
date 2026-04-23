@@ -6,11 +6,13 @@ part 'dataunitmap.g.dart';
 
 @JsonSerializable()
 class DataUnitMap {
+  final List<dynamic>? uom;
   final List<UserData>? userData;
   final List<dynamic>? finding;
   final List<StatusModel>? status;
 
   DataUnitMap({
+    this.uom = const [],
     this.userData = const [],
     this.finding = const [],
     this.status = const [],

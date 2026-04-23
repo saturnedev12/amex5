@@ -26,6 +26,29 @@ class SessionManager extends ChangeNotifier {
   bool get isLoggedIn => _token != null && _token!.isNotEmpty;
   String? get passwordHash => _passwordHash;
 
+  // ── User Information Getters ──
+  bool get pwdToChange => _loginResponse?['pwdToChange'] as bool? ?? false;
+  String? get userGroup => _loginResponse?['userGroup'] as String?;
+  String? get profile => _loginResponse?['profile'] as String?;
+  bool get globalAdmin => _loginResponse?['globalAdmin'] as bool? ?? false;
+  String? get systemToken => _loginResponse?['systemToken'] as String?;
+  List<dynamic>? get auths => _loginResponse?['auths'] as List<dynamic>?;
+  Map<String, dynamic>? get appData =>
+      _loginResponse?['appData'] as Map<String, dynamic>?;
+
+  // ── userData shortcuts (premier élément de appData.userData) ──
+  Map<String, dynamic>? get _userData {
+    final list = appData?['dataUnitMap']?['userData'] as List<dynamic>?;
+    if (list != null && list.isNotEmpty) {
+      return list.first as Map<String, dynamic>?;
+    }
+    return null;
+  }
+
+  String? get name => _userData?['name'] as String?;
+  String? get employeeCode => _userData?['employeeCode'] as String?;
+  String? get userCode => _userData?['code'] as String?;
+
   /// Path to redirect to after re-login (when token expires).
   String? pendingRedirect;
 
@@ -48,11 +71,13 @@ class SessionManager extends ChangeNotifier {
     String? xDevice,
   }) async {
     _token = token;
-    _loginResponse = loginResponseJson;
+    // Deep-convert to plain Maps (nested model objects → raw JSON maps)
+    final encoded = json.encode(loginResponseJson);
+    _loginResponse = json.decode(encoded) as Map<String, dynamic>;
     if (xDevice != null) _xDevice = xDevice;
 
     await _prefs?.setString(_tokenKey, token);
-    await _prefs?.setString(_loginResponseKey, json.encode(loginResponseJson));
+    await _prefs?.setString(_loginResponseKey, encoded);
     final salt = dotenv.env['BCRYPT_SALT']!;
     _passwordHash = BCrypt.hashpw(password, salt);
     await _prefs?.setString(_passwordKey, _passwordHash!);

@@ -7,6 +7,7 @@ part of 'dataunitmap.dart';
 // **************************************************************************
 
 DataUnitMap _$DataUnitMapFromJson(Map<String, dynamic> json) => DataUnitMap(
+  uom: json['uom'] as List<dynamic>? ?? const [],
   userData:
       (json['userData'] as List<dynamic>?)
           ?.map((e) => UserData.fromJson(e as Map<String, dynamic>))
@@ -22,6 +23,7 @@ DataUnitMap _$DataUnitMapFromJson(Map<String, dynamic> json) => DataUnitMap(
 
 Map<String, dynamic> _$DataUnitMapToJson(DataUnitMap instance) =>
     <String, dynamic>{
+      'uom': instance.uom,
       'userData': instance.userData,
       'finding': instance.finding,
       'status': instance.status,

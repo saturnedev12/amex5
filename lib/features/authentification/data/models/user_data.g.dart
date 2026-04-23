@@ -7,6 +7,7 @@ part of 'user_data.dart';
 // **************************************************************************
 
 UserData _$UserDataFromJson(Map<String, dynamic> json) => UserData(
+  code: json['code'] as String?,
   employeeCode: json['employeeCode'] as String? ?? "",
   name: json['name'] as String? ?? "",
   lastsaved: json['lastsaved'] == null
@@ -18,6 +19,7 @@ UserData _$UserDataFromJson(Map<String, dynamic> json) => UserData(
 );
 
 Map<String, dynamic> _$UserDataToJson(UserData instance) => <String, dynamic>{
+  'code': instance.code,
   'employeeCode': instance.employeeCode,
   'name': instance.name,
   'lastsaved': instance.lastsaved?.toIso8601String(),
