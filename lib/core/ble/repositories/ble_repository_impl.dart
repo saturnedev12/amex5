@@ -1,8 +1,11 @@
-import '../../domain/entities/ble_device_entity.dart';
-import '../../domain/repositories/ble_repository.dart';
+import 'package:injectable/injectable.dart';
+
+import '../entities/ble_device_entity.dart';
+import 'ble_repository.dart';
 import '../datasources/ble_data_source.dart';
 
 /// Implémentation du dépôt BLE — délègue intégralement à la datasource.
+@Injectable(as: BleRepository)
 class BleRepositoryImpl implements BleRepository {
   final BleDataSource _dataSource;
 

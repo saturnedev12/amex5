@@ -1,27 +1,26 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../domain/entities/ble_device_entity.dart';
-import '../bloc/ble_bloc.dart';
+import '../../theme/app_theme.dart';
+import '../entities/ble_device_entity.dart';
+import '../ble_service.dart';
 
 // ── BleStatusBadge ────────────────────────────────────────────────────────
 
 /// Badge d'état de connexion BLE (style identique au StatusBadge existant).
 class BleStatusBadge extends StatelessWidget {
-  final BleState state;
+  final BleConnectionState state;
 
   const BleStatusBadge({super.key, required this.state});
 
   @override
   Widget build(BuildContext context) {
     final (label, color) = switch (state) {
-      BleInitial() => ('INACTIF', AppColors.textDisabled),
-      BleScanning() => ('SCAN...', AppColors.warning),
-      BleConnecting() => ('CONNEXION', AppColors.warning),
-      BleConnected() => ('CONNECTÉ', AppColors.success),
-      BleSending() => ('ENVOI', AppColors.info),
-      BleDisconnected() => ('DÉCONNECTÉ', AppColors.textSecondary),
-      BleError() => ('ERREUR', AppColors.error),
+      BleConnectionState.disconnected => ('DÉCONNECTÉ', AppColors.textSecondary),
+      BleConnectionState.scanning => ('SCAN...', AppColors.warning),
+      BleConnectionState.connecting => ('CONNEXION', AppColors.warning),
+      BleConnectionState.connected => ('CONNECTÉ', AppColors.success),
+      BleConnectionState.sending => ('ENVOI', AppColors.info),
+      BleConnectionState.error => ('ERREUR', AppColors.error),
     };
 
     return Container(
@@ -214,9 +213,10 @@ class BleDeviceTile extends StatelessWidget {
 
 /// Entrée du journal d'échange JSON (envoyé ou reçu), avec expansion.
 class BleJsonEntry extends StatefulWidget {
-  final BleJsonRecord record;
+  final String jsonRecord;
+  final bool isReceived;
 
-  const BleJsonEntry({super.key, required this.record});
+  const BleJsonEntry({super.key, required this.jsonRecord, required this.isReceived});
 
   @override
   State<BleJsonEntry> createState() => _BleJsonEntryState();
@@ -227,22 +227,18 @@ class _BleJsonEntryState extends State<BleJsonEntry> {
 
   @override
   Widget build(BuildContext context) {
-    final isReceived = widget.record.direction == BleDirection.received;
+    final isReceived = widget.isReceived;
     final dirColor = isReceived ? AppColors.success : AppColors.info;
     final dirLabel = isReceived ? '← REÇU' : '→ ENVOYÉ';
     final dirIcon = isReceived
         ? Icons.download_outlined
         : Icons.upload_outlined;
 
-    final ts = widget.record.timestamp;
-    final timeStr =
-        '${ts.hour.toString().padLeft(2, '0')}:${ts.minute.toString().padLeft(2, '0')}:${ts.second.toString().padLeft(2, '0')}';
-
-    // Aperçu d'une ligne
-    final preview = widget.record.data.entries
-        .take(3)
-        .map((e) => '"${e.key}": ${e.value}')
-        .join(', ');
+    final timeStr = 'N/A'; // Or parsed from history if needed
+    
+    final preview = widget.jsonRecord.length > 50 
+        ? widget.jsonRecord.substring(0, 50) 
+        : widget.jsonRecord;
 
     return GestureDetector(
       onTap: () => setState(() => _expanded = !_expanded),
@@ -301,13 +297,6 @@ class _BleJsonEntryState extends State<BleJsonEntry> {
                     ),
                   ),
                   const Spacer(),
-                  Text(
-                    '${widget.record.data.length} clés',
-                    style: const TextStyle(
-                      fontSize: 9,
-                      color: AppColors.textDisabled,
-                    ),
-                  ),
                   const SizedBox(width: 8),
                   Icon(
                     _expanded
@@ -325,7 +314,7 @@ class _BleJsonEntryState extends State<BleJsonEntry> {
               Padding(
                 padding: const EdgeInsets.only(left: 10, right: 10, bottom: 8),
                 child: Text(
-                  '{ $preview${widget.record.data.length > 3 ? ', ...' : ''} }',
+                  '{ $preview${widget.jsonRecord.length > 50 ? '...' : ''} }',
                   style: const TextStyle(
                     fontSize: 10,
                     color: AppColors.textSecondary,
@@ -347,7 +336,7 @@ class _BleJsonEntryState extends State<BleJsonEntry> {
                   border: Border.all(color: AppColors.border),
                 ),
                 child: SelectableText(
-                  widget.record.prettyJson,
+                  widget.jsonRecord,
                   style: const TextStyle(
                     fontSize: 11,
                     color: AppColors.accent,

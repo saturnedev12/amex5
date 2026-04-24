@@ -4,11 +4,11 @@ import '../core/config/app_config.dart';
 import '../core/theme/app_theme.dart';
 import '../features/agent_works/presentation/pages/agent_works_page.dart';
 import '../features/ble_receive_works/presentation/pages/ble_receive_works_page.dart';
-import '../features/ble_receiver/presentation/pages/ble_receiver_page.dart';
 import '../features/discharge_works/presentation/pages/discharge_works_page.dart';
 import '../features/settings/presentation/pages/settings_page.dart';
 import '../core/di/injection.dart';
 import '../core/session/session_manager.dart';
+import '../core/ble/ble_service.dart';
 
 /// Shell principal de l'application Desktop.
 /// Navigation latérale fixe + contenu à droite.
@@ -34,14 +34,9 @@ class _AppShellState extends State<AppShell> {
       label: 'Chargement travaux',
     ),
     _NavItem(
-      icon: Icons.work_outline,
-      activeIcon: Icons.work,
-      label: 'Déchargement travaux',
-    ),
-    _NavItem(
       icon: Icons.bluetooth_outlined,
       activeIcon: Icons.bluetooth,
-      label: 'BLE Receiver',
+      label: 'Gestion BLE',
     ),
     _NavItem(
       icon: Icons.settings_outlined,
@@ -54,7 +49,6 @@ class _AppShellState extends State<AppShell> {
     DischargeWorksPage(),
     AgentWorksPage(),
     BleReceiveWorksPage(),
-    BleReceiverPage(),
     SettingsPage(),
   ];
 
@@ -302,11 +296,11 @@ class _Sidebar extends StatelessWidget {
             decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: AppColors.border)),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.circle, size: 8, color: AppColors.success),
-                SizedBox(width: 8),
-                Text(
+                const Icon(Icons.circle, size: 8, color: AppColors.success),
+                const SizedBox(width: 8),
+                const Text(
                   'SYSTÈME OPÉRATIONNEL',
                   style: TextStyle(
                     fontSize: 9,
@@ -314,6 +308,18 @@ class _Sidebar extends StatelessWidget {
                     letterSpacing: 1.2,
                     fontWeight: FontWeight.w500,
                   ),
+                ),
+                const Spacer(),
+                ListenableBuilder(
+                  listenable: getIt<BleService>(),
+                  builder: (context, _) {
+                    final bleService = getIt<BleService>();
+                    return Icon(
+                      Icons.bluetooth,
+                      size: 14,
+                      color: bleService.isConnected ? AppColors.primary : AppColors.textDisabled,
+                    );
+                  },
                 ),
               ],
             ),

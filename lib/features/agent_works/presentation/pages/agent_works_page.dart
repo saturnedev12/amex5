@@ -6,7 +6,7 @@ import 'package:amex5/core/di/injection.dart';
 import 'package:amex5/core/theme/app_theme.dart';
 import 'package:amex5/features/agent_works/data/models/wo_model.dart';
 import 'package:amex5/features/agent_works/presentation/bloc/agent_works_bloc.dart';
-import 'package:amex5/features/ble_receiver/presentation/bloc/ble_bloc.dart';
+import 'package:amex5/core/ble/ble_service.dart';
 
 class AgentWorksPage extends StatelessWidget {
   const AgentWorksPage({super.key});
@@ -780,22 +780,24 @@ class _BleTransferButton extends StatelessWidget {
     );
   }
 
-  void _sendBle(BuildContext context, Map<String, dynamic> payload) {
-    try {
-      final bleBloc = context.read<BleBloc>();
-      bleBloc.add(BleSendJsonEvent(payload));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Envoi Bluetooth en cours...'),
-          backgroundColor: AppColors.info,
-        ),
-      );
-    } catch (_) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'BLE non connecté. Allez dans BLE Receiver pour vous connecter.',
+  Future<void> _sendBle(BuildContext context, Map<String, dynamic> payload) async {
+    final bleService = getIt<BleService>();
+    final connected = await bleService.ensureConnected(context);
+
+    if (connected) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Envoi Bluetooth en cours...'),
+            backgroundColor: AppColors.info,
           ),
+        );
+      }
+      await bleService.sendJson(payload);
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('BLE non connecté ou annulation.'),
           backgroundColor: AppColors.warning,
         ),
       );

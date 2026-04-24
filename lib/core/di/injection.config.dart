@@ -9,6 +9,10 @@
 // coverage:ignore-file
 
 // ignore_for_file: no_leading_underscores_for_library_prefixes
+import 'package:amex5/core/ble/ble_service.dart' as _i184;
+import 'package:amex5/core/ble/datasources/ble_data_source.dart' as _i428;
+import 'package:amex5/core/ble/repositories/ble_repository.dart' as _i927;
+import 'package:amex5/core/ble/repositories/ble_repository_impl.dart' as _i928;
 import 'package:amex5/core/database/isar_config.dart' as _i553;
 import 'package:amex5/core/network/dio_config.dart' as _i604;
 import 'package:amex5/core/network/interceptors/auth_interceptor.dart' as _i660;
@@ -64,14 +68,21 @@ extension GetItInjectableX on _i174.GetIt {
     gh.singleton<_i929.TokenProvider>(() => _i929.TokenProvider());
     gh.singleton<_i714.SessionManager>(() => _i714.SessionManager());
     gh.lazySingleton<_i1073.ErrorInterceptor>(() => _i1073.ErrorInterceptor());
+    gh.factory<_i428.BleDataSource>(() => _i428.WindowsBleClientDataSource());
     gh.lazySingleton<_i715.LoggingInterceptor>(
       () => _i715.LoggingInterceptor(enabled: gh<bool>()),
+    );
+    gh.factory<_i927.BleRepository>(
+      () => _i928.BleRepositoryImpl(gh<_i428.BleDataSource>()),
     );
     gh.lazySingleton<_i660.AuthInterceptor>(
       () => _i660.AuthInterceptor(
         gh<_i929.TokenProvider>(),
         gh<_i714.SessionManager>(),
       ),
+    );
+    gh.singleton<_i184.BleService>(
+      () => _i184.BleService(gh<_i927.BleRepository>()),
     );
     gh.lazySingleton<_i361.Dio>(
       () => dioConfig.dio(
@@ -123,11 +134,14 @@ extension GetItInjectableX on _i174.GetIt {
         gh<_i998.BleReceiveRemoteDataSource>(),
       ),
     );
-    gh.factory<_i409.BleReceiveWorksBloc>(
-      () => _i409.BleReceiveWorksBloc(gh<_i74.BleReceiveWorksRepository>()),
-    );
     gh.factory<_i881.DischargeWorksBloc>(
       () => _i881.DischargeWorksBloc(gh<_i494.UploadDischargeWorksUseCase>()),
+    );
+    gh.factory<_i409.BleReceiveWorksBloc>(
+      () => _i409.BleReceiveWorksBloc(
+        gh<_i74.BleReceiveWorksRepository>(),
+        gh<_i184.BleService>(),
+      ),
     );
     return this;
   }

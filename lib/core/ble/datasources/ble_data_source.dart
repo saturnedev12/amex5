@@ -5,8 +5,9 @@ import 'package:flutter/foundation.dart';
 // flutter_blue_plus_windows bridges flutter_blue_plus ↔ win_ble pour Windows.
 // L'API est identique à flutter_blue_plus — seul l'import change.
 import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart';
+import 'package:injectable/injectable.dart';
 
-import '../../domain/entities/ble_device_entity.dart';
+import '../entities/ble_device_entity.dart';
 
 // UUIDs identiques côté Android (serveur) et Windows (client)
 const String _kServiceUuid = '0000ffe0-0000-1000-8000-00805f9b34fb';
@@ -16,7 +17,11 @@ const String _kCharUuid = '0000ffe1-0000-1000-8000-00805f9b34fb';
 /// win_ble peut retourner : forme courte "ffe0", forme 8-char "0000ffe0",
 /// ou forme complète 128-bit avec/sans accolades et en majuscules.
 bool _uuidMatches(Guid uuid, String expected) {
-  final raw = uuid.toString().toLowerCase().replaceAll('{', '').replaceAll('}', '');
+  final raw = uuid
+      .toString()
+      .toLowerCase()
+      .replaceAll('{', '')
+      .replaceAll('}', '');
   final exp = expected.toLowerCase();
 
   // Correspondance directe (cas normal)
@@ -37,6 +42,7 @@ bool _uuidMatches(Guid uuid, String expected) {
   }
   return false;
 }
+
 const int _kChunkSize = 250;
 const int _kChunkDelayMs = 30;
 
@@ -56,6 +62,7 @@ abstract class BleDataSource {
 /// Implémentation Windows du client BLE via flutter_blue_plus_windows.
 /// Le PC Windows agit en tant que Central (Client) et le smartphone Android
 /// agit en tant que Peripheral (Serveur).
+@Injectable(as: BleDataSource)
 class WindowsBleClientDataSource implements BleDataSource {
   BluetoothDevice? _connectedDevice;
   BluetoothCharacteristic? _characteristic;
@@ -236,6 +243,8 @@ class WindowsBleClientDataSource implements BleDataSource {
 
   // ── Envoi (Windows → Android) ─────────────────────────────────────────────
 
+  // ── Envoi (Windows → Android) ─────────────────────────────────────────────
+
   @override
   Future<void> sendJson(Map<String, dynamic> data) async {
     if (_characteristic == null) {
@@ -245,15 +254,23 @@ class WindowsBleClientDataSource implements BleDataSource {
     final bytes = utf8.encode(jsonEncode(data));
     debugPrint('BLE — Envoi de ${bytes.length} octets vers Android...');
 
+    // On utilise la limite standard universelle et sûre de 20 octets si on ne connaît
+    // pas le MTU exact du Windows, mais ici 250 est correct si les deux OS sont récents.
     for (int i = 0; i < bytes.length; i += _kChunkSize) {
       final end = (i + _kChunkSize < bytes.length)
           ? i + _kChunkSize
           : bytes.length;
+
+      // OPTIMISATION : En conservant withoutResponse: false, on s'assure que
+      // Windows a reçu l'acquittement (ACK) d'Android avant d'envoyer le chunk suivant.
+      // Le Future "await" joue lui-même le rôle de régulateur (throttle).
       await _characteristic!.write(
         bytes.sublist(i, end),
         withoutResponse: false,
       );
-      await Future.delayed(const Duration(milliseconds: _kChunkDelayMs));
+
+      // OPTIMISATION : Suppression du Future.delayed inutile qui bridait les performances
+      // car le withoutResponse: false impose déjà une attente synchrone.
     }
 
     debugPrint('BLE — Transmission complète vers Android.');
