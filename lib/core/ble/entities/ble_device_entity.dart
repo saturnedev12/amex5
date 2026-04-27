@@ -13,8 +13,7 @@ class BleDeviceEntity {
   });
 
   @override
-  bool operator ==(Object other) =>
-      other is BleDeviceEntity && other.id == id;
+  bool operator ==(Object other) => other is BleDeviceEntity && other.id == id;
 
   @override
   int get hashCode => id.hashCode;
@@ -46,4 +45,6 @@ class BleJsonRecord {
     const encoder = JsonEncoder.withIndent('  ');
     return encoder.convert(data);
   }
+
+  void test() {}
 }
