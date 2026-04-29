@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_easyloading_plus/flutter_easyloading_plus.dart';
 // flutter_blue_plus_windows bridges flutter_blue_plus ↔ win_ble pour Windows.
 // L'API est identique à flutter_blue_plus — seul l'import change.
 import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart';
@@ -254,26 +255,33 @@ class WindowsBleClientDataSource implements BleDataSource {
     final bytes = utf8.encode(jsonEncode(data));
     debugPrint('BLE — Envoi de ${bytes.length} octets vers Android...');
 
-    // On utilise la limite standard universelle et sûre de 20 octets si on ne connaît
-    // pas le MTU exact du Windows, mais ici 250 est correct si les deux OS sont récents.
-    for (int i = 0; i < bytes.length; i += _kChunkSize) {
-      final end = (i + _kChunkSize < bytes.length)
-          ? i + _kChunkSize
-          : bytes.length;
+    EasyLoading.showProgress(0.0, status: 'Envoi des données...');
 
-      // OPTIMISATION : En conservant withoutResponse: false, on s'assure que
-      // Windows a reçu l'acquittement (ACK) d'Android avant d'envoyer le chunk suivant.
-      // Le Future "await" joue lui-même le rôle de régulateur (throttle).
-      await _characteristic!.write(
-        bytes.sublist(i, end),
-        withoutResponse: false,
-      );
+    try {
+      for (int i = 0; i < bytes.length; i += _kChunkSize) {
+        final end = (i + _kChunkSize < bytes.length)
+            ? i + _kChunkSize
+            : bytes.length;
 
-      // OPTIMISATION : Suppression du Future.delayed inutile qui bridait les performances
-      // car le withoutResponse: false impose déjà une attente synchrone.
+        // OPTIMISATION : En conservant withoutResponse: false, on s'assure que
+        // Windows a reçu l'acquittement (ACK) d'Android avant d'envoyer le chunk suivant.
+        // Le Future "await" joue lui-même le rôle de régulateur (throttle).
+        await _characteristic!.write(
+          bytes.sublist(i, end),
+          withoutResponse: false,
+        );
+
+        final progress = end / bytes.length;
+        EasyLoading.showProgress(progress.clamp(0.0, 1.0), status: 'Envoi des données...');
+
+        // OPTIMISATION : Suppression du Future.delayed inutile qui bridait les performances
+        // car le withoutResponse: false impose déjà une attente synchrone.
+      }
+
+      debugPrint('BLE — Transmission complète vers Android.');
+    } finally {
+      EasyLoading.dismiss();
     }
-
-    debugPrint('BLE — Transmission complète vers Android.');
   }
 
   // ── Déconnexion ───────────────────────────────────────────────────────────

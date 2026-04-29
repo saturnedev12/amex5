@@ -1,20 +1,23 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
 import '../../constants/api_constants.dart';
 import '../../session/session_manager.dart';
+import '../dialogs/token_expired_dialog.dart';
+import '../../router/app_router.dart';
 import 'token_provider.dart';
 
 /// Intercepteur d'authentification.
 ///
 /// Injecte le Bearer token et X-device dans chaque requête.
-/// Détecte 401 EXPIRED_TOKEN et déclenche la redirection vers login.
+/// Détecte 401 EXPIRED_TOKEN et déclenche le callback pour re-login.
 @lazySingleton
 class AuthInterceptor extends Interceptor {
   final TokenProvider _tokenProvider;
   final SessionManager _sessionManager;
 
-  /// Callback set by the app to navigate to login on token expiry.
-  static void Function()? onTokenExpired;
+  /// Callback set by the app to handle token expiry — typically shows a re-login dialog.
+  static Future<void> Function(BuildContext)? onTokenExpired;
 
   AuthInterceptor(this._tokenProvider, this._sessionManager);
 
@@ -39,12 +42,25 @@ class AuthInterceptor extends Interceptor {
     if (err.response?.statusCode == 401) {
       final body = err.response?.data;
       final isExpired =
-          body is String && body.contains('EXPIRED_TOKEN') ||
+          (body is String && body.contains('EXPIRED_TOKEN')) ||
           (body is Map && body.toString().contains('EXPIRED_TOKEN'));
 
       if (isExpired) {
         await _sessionManager.clear();
-        onTokenExpired?.call();
+
+        // Afficher le dialog de re-login si on a un contexte disponible
+        final context = appNavigatorKey.currentContext;
+        if (context != null && context.mounted) {
+          Future.microtask(() async {
+            // Utiliser le callback personnalisé s'il existe, sinon afficher le dialog par défaut
+            if (onTokenExpired != null) {
+              await onTokenExpired!(context);
+            } else {
+              await showTokenExpiredDialog(context);
+            }
+          });
+        }
+
         handler.next(err);
         return;
       }

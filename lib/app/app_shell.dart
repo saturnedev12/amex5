@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../core/config/app_config.dart';
 import '../core/theme/app_theme.dart';
@@ -320,6 +321,26 @@ class _Sidebar extends StatelessWidget {
                       color: bleService.isConnected ? AppColors.primary : AppColors.textDisabled,
                     );
                   },
+                ),
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: 'Déconnexion',
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () async {
+                        await getIt<SessionManager>().clear();
+                        if (context.mounted) {
+                          context.go('/login');
+                        }
+                      },
+                      child: const Icon(
+                        Icons.logout,
+                        size: 14,
+                        color: AppColors.textDisabled,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),

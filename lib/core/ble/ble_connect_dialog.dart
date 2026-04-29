@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -26,13 +27,22 @@ Future<bool> showBleConnectDialog(BuildContext context) async {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
             ),
-            title: const Text(
-              'Connexion Bluetooth',
-              style: TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+            title: Row(
+              mainAxisAlignment: .spaceBetween,
+              children: [
+                const Text(
+                  'Connexion Bluetooth',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+
+                IconButton(onPressed: (){
+                   Navigator.of(context).pop(false);
+                }, icon:Icon(CupertinoIcons.xmark_circle_fill))
+              ],
             ),
             content: SizedBox(
               width: 300,
@@ -111,18 +121,7 @@ Future<bool> showBleConnectDialog(BuildContext context) async {
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  service.stopScan();
-                  Navigator.of(context).pop(false);
-                },
-                child: const Text(
-                  'ANNULER',
-                  style: TextStyle(color: AppColors.textSecondary),
-                ),
-              ),
-            ],
+     
           );
         },
       );

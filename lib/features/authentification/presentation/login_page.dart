@@ -26,8 +26,8 @@ class LoginView extends StatefulWidget {
 }
 
 class _LoginViewState extends State<LoginView> {
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _usernameController = TextEditingController(text: 'R5');
+  final _passwordController = TextEditingController(text: 'Admin@2030');
   bool _obscurePassword = true;
 
   @override

@@ -1,3 +1,6 @@
+
+import 'dart:developer';
+
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 import '../../error/exceptions.dart';
@@ -9,6 +12,7 @@ class ErrorInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     final exception = _mapDioException(err);
+    inspect(err);
     // On attache l'exception à l'erreur pour la récupérer plus haut
     handler.next(err.copyWith(error: exception, message: exception.message));
   }
@@ -63,10 +67,18 @@ class ErrorInterceptor extends Interceptor {
   }
 
   String _extractMessage(Response? response) {
-    if (response?.data is Map) {
-      final data = response!.data as Map;
+    final data = response?.data;
+    
+    // Si c'est une String (ex: "EXPIRED_TOKEN"), la retourner directement
+    if (data is String) {
+      return data.isNotEmpty ? data : 'Erreur ${response?.statusCode ?? 'inconnue'}';
+    }
+    
+    // Si c'est une Map, extraire le message
+    if (data is Map) {
       return (data['message'] ?? data['error'] ?? 'Erreur serveur').toString();
     }
+    
     return 'Erreur ${response?.statusCode ?? 'inconnue'}';
   }
 }

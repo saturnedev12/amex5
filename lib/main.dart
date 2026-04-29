@@ -6,18 +6,18 @@ import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'core/di/injection.dart';
 import 'core/network/interceptors/auth_interceptor.dart';
-import 'core/session/session_manager.dart';
+import 'core/network/dialogs/token_expired_dialog.dart';
+import 'package:flutter_easyloading_plus/flutter_easyloading_plus.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await dotenv.load(fileName: ".env");
   await configureDependencies();
-  // Wire token expiry → redirect to login
-  AuthInterceptor.onTokenExpired = () {
-    final session = getIt<SessionManager>();
-    session.pendingRedirect = '/home';
-    appRouter.go('/login');
+  
+  // Wire token expiry → show re-login dialog
+  AuthInterceptor.onTokenExpired = (context) async {
+    await showTokenExpiredDialog(context);
   };
 
   await AppConfig.init();
@@ -35,6 +35,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.dark,
       routerConfig: appRouter,
+      builder: EasyLoading.init(),
     );
   }
 }

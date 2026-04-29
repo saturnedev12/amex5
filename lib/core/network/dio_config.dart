@@ -9,16 +9,15 @@ import 'package:amex5/core/network/interceptors/error_interceptor.dart';
 @module
 abstract class DioConfig {
   @lazySingleton
-  Dio dio(AuthInterceptor authInterceptor, ErrorInterceptor errorInterceptor) {
+  Dio dio(
+    AuthInterceptor authInterceptor,
+    ErrorInterceptor errorInterceptor,
+  ) {
     final dio = Dio(
       BaseOptions(
         baseUrl: ApiConstants.baseUrl,
-        connectTimeout: const Duration(
-          milliseconds: ApiConstants.connectTimeoutMs,
-        ),
-        receiveTimeout: const Duration(
-          milliseconds: ApiConstants.receiveTimeoutMs,
-        ),
+        connectTimeout: const Duration(milliseconds: ApiConstants.connectTimeoutMs),
+        receiveTimeout: const Duration(milliseconds: ApiConstants.receiveTimeoutMs),
         sendTimeout: const Duration(milliseconds: ApiConstants.sendTimeoutMs),
         headers: {
           ApiConstants.headerContentType: ApiConstants.headerApplicationJson,
