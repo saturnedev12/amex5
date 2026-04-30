@@ -12,7 +12,6 @@ class ErrorInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     final exception = _mapDioException(err);
-    inspect(err);
     // On attache l'exception à l'erreur pour la récupérer plus haut
     handler.next(err.copyWith(error: exception, message: exception.message));
   }

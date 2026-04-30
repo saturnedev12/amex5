@@ -1,3 +1,5 @@
+import 'dart:developer' show inspect, log;
+
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
 import '../models/sync_response_model.dart';
@@ -20,9 +22,15 @@ class AgentWorksRemoteDataSource {
     required String woCode,
     required int act,
   }) async {
+log("TAG");
     final response = await _dio.get('/wmwo/checklist/$woCode/$act');
-    return ChecklistResponseModel.fromJson(
-      response.data as Map<String, dynamic>,
-    );
+    
+    inspect(response);
+    return ChecklistResponseModel();
+    // return ChecklistResponseModel.fromJson(
+    //   response.data as Map<String, dynamic>,
+    // );                                      
+                                                
+                                                 
   }
 }
