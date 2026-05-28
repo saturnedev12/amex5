@@ -19,8 +19,9 @@ class DischargeWorksCubit extends Cubit<DischargeWorksCubitState> {
     : super(const DischargeWorksCubitState()) {
     _jsonSubscription = _bleService.receivedJsonStream.listen(
       receiveJson,
-      onError: (Object error) =>
-          emit(state.copyWith(errorMessage: 'Erreur réception BLE : $error')),
+      onError: (Object error) => emit(
+        state.copyWith(errorMessage: 'Erreur réception bluetooth : $error'),
+      ),
     );
   }
 

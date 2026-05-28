@@ -84,7 +84,14 @@ class WoModel {
     this.scheduledEnd,
   });
 
-  factory WoModel.fromJson(Map<String, dynamic> json) =>
-      _$WoModelFromJson(json);
+  factory WoModel.fromJson(Map<String, dynamic> json) {
+    final normalized = Map<String, dynamic>.from(json);
+    if (!normalized.containsKey('checkListItems') &&
+        normalized['checkItems'] is List) {
+      normalized['checkListItems'] = normalized['checkItems'];
+    }
+    return _$WoModelFromJson(normalized);
+  }
+
   Map<String, dynamic> toJson() => _$WoModelToJson(this);
 }

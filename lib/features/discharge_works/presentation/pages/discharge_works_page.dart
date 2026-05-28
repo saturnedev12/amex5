@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:amex5/core/ble/ble_service.dart';
 import 'package:amex5/core/ble/widgets/ble_widgets.dart';
 import 'package:amex5/core/di/injection.dart';
 import 'package:amex5/core/theme/app_theme.dart';
+import 'package:amex5/features/agent_works/data/models/task_model.dart';
 import 'package:amex5/features/agent_works/domain/repositories/agent_works_repository.dart';
 
 import '../../domain/entities/discharge_entities.dart';
@@ -44,7 +46,26 @@ class _DischargeWorksViewState extends State<_DischargeWorksView> {
   @override
   void initState() {
     super.initState();
+    widget.bleService.addListener(_maybeStartInitialScan);
     WidgetsBinding.instance.addPostFrameCallback((_) => _startInitialScan());
+  }
+
+  @override
+  void dispose() {
+    widget.bleService.removeListener(_maybeStartInitialScan);
+    super.dispose();
+  }
+
+  void _maybeStartInitialScan() {
+    if (!mounted || _initialScanRequested || widget.bleService.isConnected) {
+      return;
+    }
+    if (!widget.bleService.isBluetoothOn) return;
+    if (widget.bleService.connectionState != BleConnectionState.disconnected) {
+      return;
+    }
+    _initialScanRequested = true;
+    unawaited(widget.bleService.startScan());
   }
 
   Future<void> _startInitialScan() async {
@@ -170,7 +191,7 @@ class _BleReceptionPanel extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: IndustrialCard(
-                  title: 'Réception BLE',
+                  title: 'Réception bluetooth',
                   icon: Icons.bluetooth_searching,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -202,12 +223,12 @@ class _BleReceptionPanel extends StatelessWidget {
                       Row(
                         children: [
                           Expanded(
-                            child: PrimaryActionButton(
+                            child: _ConnectionActionButton(
                               label:
                                   bleService.connectionState ==
                                       BleConnectionState.scanning
-                                  ? 'Scan...'
-                                  : 'Scanner',
+                                  ? 'Recherche...'
+                                  : 'Rechercher',
                               icon: Icons.radar_outlined,
                               loading:
                                   bleService.connectionState ==
@@ -218,24 +239,14 @@ class _BleReceptionPanel extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          SizedBox(
-                            width: 46,
-                            height: 44,
-                            child: OutlinedButton(
+                          Expanded(
+                            child: _ConnectionActionButton(
+                              label: 'Déconnecter',
+                              icon: Icons.bluetooth_disabled,
                               onPressed: bleService.isConnected
                                   ? bleService.disconnect
                                   : null,
-                              style: OutlinedButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                side: const BorderSide(color: AppColors.border),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.bluetooth_disabled,
-                                size: 18,
-                              ),
+                              outlined: true,
                             ),
                           ),
                         ],
@@ -282,7 +293,7 @@ class _BleReceptionPanel extends StatelessWidget {
                   border: Border(top: BorderSide(color: AppColors.border)),
                 ),
                 child: const Text(
-                  'ÉCOUTE JSON BLE ACTIVE APRÈS CONNEXION',
+                  'ÉCOUTE JSON BLUETOOTH ACTIVE APRÈS CONNEXION',
                   style: AppTextStyles.bodyMedium,
                 ),
               ),
@@ -582,13 +593,15 @@ class _WorksListPanel extends StatelessWidget {
         itemCount: lines.length,
         itemBuilder: (context, index) {
           final line = lines[index];
+          final checklistItems =
+              line.work.checkListItems ?? const <TaskModel>[];
           return _UploadLineTile(
             title: line.title,
             subtitle: line.work.woDesc ?? line.work.objectDesc ?? '-',
-            detail:
-                '${line.work.checkListItems?.length ?? 0} item(s) checklist',
+            detail: '${checklistItems.length} item(s) checklist',
             status: line.status,
             errorMessage: line.errorMessage,
+            footer: _ChecklistItemsPreview(items: checklistItems),
             onSend: () =>
                 context.read<DischargeWorksCubit>().uploadWork(line.id),
           );
@@ -688,6 +701,7 @@ class _UploadLineTile extends StatelessWidget {
   final DischargeUploadStatus status;
   final String? errorMessage;
   final VoidCallback onSend;
+  final Widget? footer;
 
   const _UploadLineTile({
     required this.title,
@@ -696,6 +710,7 @@ class _UploadLineTile extends StatelessWidget {
     required this.status,
     required this.onSend,
     this.errorMessage,
+    this.footer,
   });
 
   @override
@@ -711,85 +726,95 @@ class _UploadLineTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: AppColors.border),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: statusColor.withValues(alpha: 0.35)),
-            ),
-            child: isSending
-                ? const Padding(
-                    padding: EdgeInsets.all(7),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.accent,
-                    ),
-                  )
-                : Icon(_statusIcon(status), size: 16, color: statusColor),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTextStyles.titleMedium.copyWith(fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  style: AppTextStyles.bodyMedium.copyWith(fontSize: 12),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  detail,
-                  style: AppTextStyles.mono.copyWith(fontSize: 10),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (errorMessage != null) ...[
-                  const SizedBox(height: 5),
-                  Text(
-                    errorMessage!,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.error,
-                      fontSize: 11,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          SizedBox(
-            height: 32,
-            child: OutlinedButton(
-              onPressed: isSending ? null : onSend,
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                side: BorderSide(color: statusColor.withValues(alpha: 0.6)),
-                shape: RoundedRectangleBorder(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: isSending
+                    ? const Padding(
+                        padding: EdgeInsets.all(7),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.accent,
+                        ),
+                      )
+                    : Icon(_statusIcon(status), size: 16, color: statusColor),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: AppTextStyles.titleMedium.copyWith(fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: AppTextStyles.bodyMedium.copyWith(fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      detail,
+                      style: AppTextStyles.mono.copyWith(fontSize: 10),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (errorMessage != null) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        errorMessage!,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.error,
+                          fontSize: 11,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
                 ),
               ),
-              child: Text(
-                status == DischargeUploadStatus.sent ? 'RENVOYER' : 'ENVOYER',
-                style: const TextStyle(fontSize: 10),
+              const SizedBox(width: 8),
+              SizedBox(
+                height: 32,
+                child: OutlinedButton(
+                  onPressed: isSending ? null : onSend,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    side: BorderSide(color: statusColor.withValues(alpha: 0.6)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  child: Text(
+                    status == DischargeUploadStatus.sent
+                        ? 'RENVOYER'
+                        : 'ENVOYER',
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
+          if (footer != null) ...[const SizedBox(height: 8), footer!],
         ],
       ),
     );
@@ -811,6 +836,134 @@ class _UploadLineTile extends StatelessWidget {
       DischargeUploadStatus.sent => Icons.check_circle_outline,
       DischargeUploadStatus.error => Icons.error_outline,
     };
+  }
+}
+
+class _ChecklistItemsPreview extends StatelessWidget {
+  final List<TaskModel> items;
+
+  const _ChecklistItemsPreview({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Text(
+          'Aucun élément de checklist détecté dans ce travail.',
+          style: AppTextStyles.bodyMedium.copyWith(fontSize: 11),
+        ),
+      );
+    }
+
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 10),
+          childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+          dense: true,
+          initiallyExpanded: items.length <= 3,
+          iconColor: AppColors.primary,
+          collapsedIconColor: AppColors.textDisabled,
+          title: Text(
+            '${items.length} élément(s) de checklist',
+            style: AppTextStyles.labelSmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 260),
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    for (final item in items) _ChecklistItemRow(item: item),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChecklistItemRow extends StatelessWidget {
+  final TaskModel item;
+
+  const _ChecklistItemRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final completed = item.completed ?? false;
+    final color = completed ? AppColors.success : AppColors.textDisabled;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            completed
+                ? Icons.check_circle_outline
+                : Icons.radio_button_unchecked,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.desc ?? item.longLabel ?? '-',
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    fontSize: 11,
+                    color: AppColors.textPrimary,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${item.code ?? '—'} • ${item.type ?? '—'} • séq. ${item.sequence ?? 0}',
+                  style: AppTextStyles.mono.copyWith(fontSize: 9),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (item.notes != null && item.notes!.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    item.notes!,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      fontSize: 10,
+                      color: AppColors.accent,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -896,6 +1049,91 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
+class _ConnectionActionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool loading;
+  final bool outlined;
+
+  const _ConnectionActionButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+    this.loading = false,
+    this.outlined = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final child = loading
+        ? SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: outlined ? AppColors.primary : Colors.white,
+            ),
+          )
+        : Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          );
+
+    final style = outlined
+        ? OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            side: const BorderSide(color: AppColors.border),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+            textStyle: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.7,
+            ),
+          )
+        : ElevatedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            backgroundColor: AppColors.primary,
+            disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.35),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(4),
+            ),
+            textStyle: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.7,
+            ),
+          );
+
+    return SizedBox(
+      height: 36,
+      child: outlined
+          ? OutlinedButton(
+              onPressed: loading ? null : onPressed,
+              style: style,
+              child: child,
+            )
+          : ElevatedButton(
+              onPressed: loading ? null : onPressed,
+              style: style,
+              child: child,
+            ),
+    );
+  }
+}
+
 class _InlineError extends StatelessWidget {
   final String message;
 
@@ -956,7 +1194,7 @@ class _AdapterBadge extends StatelessWidget {
           ),
           const SizedBox(width: 6),
           Text(
-            ready ? 'BLE ACTIF' : 'BLE INACTIF',
+            ready ? 'BLUETOOTH ACTIF' : 'BLUETOOTH INACTIF',
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
