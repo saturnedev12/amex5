@@ -1,8 +1,6 @@
-
-import 'dart:developer';
-
 import 'package:dio/dio.dart';
 import 'package:injectable/injectable.dart';
+import '../api_response_parser.dart';
 import '../../error/exceptions.dart';
 
 /// Intercepteur d'erreurs — transforme les [DioException] en [AppException]
@@ -41,6 +39,10 @@ class ErrorInterceptor extends Interceptor {
 
   AppException _mapStatusCode(Response? response) {
     final statusCode = response?.statusCode ?? 0;
+    if (ApiResponseParser.isExpiredTokenBody(response?.data)) {
+      return const TokenExpiredException();
+    }
+
     final message = _extractMessage(response);
 
     switch (statusCode) {
@@ -67,17 +69,19 @@ class ErrorInterceptor extends Interceptor {
 
   String _extractMessage(Response? response) {
     final data = response?.data;
-    
+
     // Si c'est une String (ex: "EXPIRED_TOKEN"), la retourner directement
     if (data is String) {
-      return data.isNotEmpty ? data : 'Erreur ${response?.statusCode ?? 'inconnue'}';
+      return data.isNotEmpty
+          ? data
+          : 'Erreur ${response?.statusCode ?? 'inconnue'}';
     }
-    
+
     // Si c'est une Map, extraire le message
     if (data is Map) {
       return (data['message'] ?? data['error'] ?? 'Erreur serveur').toString();
     }
-    
+
     return 'Erreur ${response?.statusCode ?? 'inconnue'}';
   }
 }

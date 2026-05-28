@@ -1,4 +1,6 @@
+import 'package:amex5/core/extension/context_extention.dart';
 import 'package:flutter/material.dart';
+import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/config/app_config.dart';
@@ -27,7 +29,7 @@ class _AppShellState extends State<AppShell> {
     _NavItem(
       icon: Icons.upload_file_outlined,
       activeIcon: Icons.upload_file,
-      label: 'Discharge Works',
+      label: 'Déchargement travaux',
     ),
     _NavItem(
       icon: Icons.work_outline,
@@ -115,13 +117,17 @@ class _Sidebar extends StatelessWidget {
             listenable: getIt<SessionManager>(),
             builder: (context, _) {
               final session = getIt<SessionManager>();
-              final name = session.name ?? session.employeeCode ?? 'Utilisateur';
+              final name =
+                  session.name ?? session.employeeCode ?? 'Utilisateur';
               final profile = session.profile ?? '-';
               final userGroup = session.userGroup ?? '-';
               final isGlobal = session.globalAdmin;
 
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 decoration: const BoxDecoration(
                   border: Border(bottom: BorderSide(color: AppColors.border)),
                 ),
@@ -195,7 +201,9 @@ class _Sidebar extends StatelessWidget {
                                 ),
                                 child: Center(
                                   child: Text(
-                                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                    name.isNotEmpty
+                                        ? name[0].toUpperCase()
+                                        : '?',
                                     style: const TextStyle(
                                       fontSize: 13,
                                       fontWeight: FontWeight.bold,
@@ -260,6 +268,47 @@ class _Sidebar extends StatelessWidget {
                               ),
                             ),
                           ],
+                          Gap(8),
+
+                          InputChip(
+                            label: const Text('Se déconnecter'),
+                            labelStyle: context.textTheme.labelSmall,
+                            avatar: const Icon(
+                              Icons.logout,
+                              size: 14,
+                              color: AppColors.accent,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Confirmer la déconnexion'),
+                                  content: const Text(
+                                    'Êtes-vous sûr de vouloir vous déconnecter ?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('Annuler'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () async {
+                                        await getIt<SessionManager>().clear();
+                                        if (context.mounted) {
+                                          context.go('/login');
+                                        }
+                                      },
+                                      child: const Text('Déconnexion'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                         ],
                       ),
                     ),
@@ -318,7 +367,9 @@ class _Sidebar extends StatelessWidget {
                     return Icon(
                       Icons.bluetooth,
                       size: 14,
-                      color: bleService.isConnected ? AppColors.primary : AppColors.textDisabled,
+                      color: bleService.isConnected
+                          ? AppColors.primary
+                          : AppColors.textDisabled,
                     );
                   },
                 ),

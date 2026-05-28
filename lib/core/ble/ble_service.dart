@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart';
 import 'package:injectable/injectable.dart';
 
 import 'entities/ble_device_entity.dart';
@@ -21,6 +21,8 @@ class BleService extends ChangeNotifier {
   final BleRepository _repository;
 
   BleConnectionState _connectionState = BleConnectionState.disconnected;
+  BluetoothAdapterState _adapterState = BluetoothAdapterState.unknown;
+  bool _isBluetoothSupported = true;
   BleDeviceEntity? _connectedDevice;
   List<BleDeviceEntity> _scanResults = [];
   final List<String> _history = [];
@@ -29,19 +31,51 @@ class BleService extends ChangeNotifier {
   StreamSubscription? _scanSubscription;
   StreamSubscription? _connectionSubscription;
   StreamSubscription? _jsonSubscription;
+  StreamSubscription<BluetoothAdapterState>? _adapterStateSubscription;
 
   BleService(this._repository) {
+    _initAdapterState();
     _initSubscriptions();
   }
 
   BleConnectionState get connectionState => _connectionState;
-  bool get isConnected => _connectionState == BleConnectionState.connected || _connectionState == BleConnectionState.sending;
+  BluetoothAdapterState get adapterState => _adapterState;
+  bool get isBluetoothSupported => _isBluetoothSupported;
+  bool get isBluetoothOn => _adapterState == BluetoothAdapterState.on;
+  bool get isBluetoothReady => _isBluetoothSupported && isBluetoothOn;
+  bool get isConnected =>
+      _connectionState == BleConnectionState.connected ||
+      _connectionState == BleConnectionState.sending;
   BleDeviceEntity? get connectedDevice => _connectedDevice;
   List<BleDeviceEntity> get scanResults => _scanResults;
   List<String> get history => _history;
   String? get errorMessage => _errorMessage;
 
-  Stream<Map<String, dynamic>> get receivedJsonStream => _repository.receivedJsonStream;
+  Stream<Map<String, dynamic>> get receivedJsonStream =>
+      _repository.receivedJsonStream;
+
+  void _initAdapterState() {
+    unawaited(
+      FlutterBluePlus.isSupported
+          .then((supported) {
+            _isBluetoothSupported = supported;
+            notifyListeners();
+          })
+          .catchError((Object _) {
+            _isBluetoothSupported = false;
+            notifyListeners();
+          }),
+    );
+
+    _adapterStateSubscription = FlutterBluePlus.adapterState.listen((state) {
+      _adapterState = state;
+      if (state != BluetoothAdapterState.on &&
+          _connectionState == BleConnectionState.scanning) {
+        _connectionState = BleConnectionState.disconnected;
+      }
+      notifyListeners();
+    });
+  }
 
   void _initSubscriptions() {
     _scanSubscription = _repository.scanResultsStream.listen((results) {
@@ -49,7 +83,9 @@ class BleService extends ChangeNotifier {
       notifyListeners();
     });
 
-    _connectionSubscription = _repository.connectionStateStream.listen((isConnected) {
+    _connectionSubscription = _repository.connectionStateStream.listen((
+      isConnected,
+    ) {
       if (isConnected) {
         _connectionState = BleConnectionState.connected;
       } else {
@@ -67,9 +103,29 @@ class BleService extends ChangeNotifier {
 
   Future<void> startScan() async {
     _errorMessage = null;
-    _connectionState = BleConnectionState.scanning;
-    notifyListeners();
     try {
+      _isBluetoothSupported = await FlutterBluePlus.isSupported;
+      final currentAdapterState = await FlutterBluePlus.adapterState.first
+          .timeout(const Duration(seconds: 2), onTimeout: () => _adapterState);
+      _adapterState = currentAdapterState;
+
+      if (!_isBluetoothSupported) {
+        _connectionState = BleConnectionState.error;
+        _errorMessage = 'Bluetooth non supporté sur cet appareil.';
+        notifyListeners();
+        return;
+      }
+
+      if (currentAdapterState != BluetoothAdapterState.on) {
+        _connectionState = BleConnectionState.error;
+        _errorMessage =
+            'Bluetooth désactivé. Activez le Bluetooth avant de scanner.';
+        notifyListeners();
+        return;
+      }
+
+      _connectionState = BleConnectionState.scanning;
+      notifyListeners();
       await _repository.startScan();
     } catch (e) {
       _connectionState = BleConnectionState.error;
@@ -108,12 +164,12 @@ class BleService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    
+
     final previousState = _connectionState;
     _connectionState = BleConnectionState.sending;
     _history.insert(0, 'Sent: $data');
     notifyListeners();
-    
+
     try {
       await _repository.sendJson(data);
       _connectionState = previousState;
@@ -141,6 +197,7 @@ class BleService extends ChangeNotifier {
     _scanSubscription?.cancel();
     _connectionSubscription?.cancel();
     _jsonSubscription?.cancel();
+    _adapterStateSubscription?.cancel();
     _repository.dispose();
     super.dispose();
   }

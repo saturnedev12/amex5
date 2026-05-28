@@ -40,6 +40,12 @@ class UnauthorizedException extends AppException {
     : super('Non autorisé. Veuillez vous connecter.');
 }
 
+/// 401 avec body EXPIRED_TOKEN.
+class TokenExpiredException extends AppException {
+  const TokenExpiredException()
+    : super('Votre session a expiré. Veuillez vous reconnecter.');
+}
+
 /// 403 Forbidden
 class ForbiddenException extends AppException {
   const ForbiddenException()
@@ -85,6 +91,13 @@ class UnknownException extends AppException {
 class ParseException extends AppException {
   const ParseException([
     super.message = 'Erreur lors du traitement des données.',
+  ]);
+}
+
+/// La réponse HTTP est valide, mais son format ne correspond pas au modèle attendu.
+class InvalidResponseException extends AppException {
+  const InvalidResponseException([
+    super.message = 'Format de réponse inattendu.',
   ]);
 }
 

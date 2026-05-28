@@ -692,7 +692,7 @@ class _BleTransferButton extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'BLE',
+                  'Chargement Bluetooth',
                   style: AppTextStyles.labelSmall.copyWith(
                     fontSize: 10,
                     color: hasChecklist
@@ -780,7 +780,10 @@ class _BleTransferButton extends StatelessWidget {
     );
   }
 
-  Future<void> _sendBle(BuildContext context, Map<String, dynamic> payload) async {
+  Future<void> _sendBle(
+    BuildContext context,
+    Map<String, dynamic> payload,
+  ) async {
     final bleService = getIt<BleService>();
     final connected = await bleService.ensureConnected(context);
 

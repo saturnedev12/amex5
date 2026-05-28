@@ -1,10 +1,11 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:injectable/injectable.dart';
 import '../../constants/api_constants.dart';
-import '../../session/session_manager.dart';
-import '../dialogs/token_expired_dialog.dart';
 import '../../router/app_router.dart';
+import '../../session/session_manager.dart';
 import 'token_provider.dart';
 
 /// Intercepteur d'authentification.
@@ -26,7 +27,7 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    final token = _sessionManager.token;
+    final token = await _tokenProvider.accessToken() ?? _sessionManager.token;
     if (token != null && token.isNotEmpty) {
       options.headers[ApiConstants.headerAuthorization] = token;
     }
@@ -35,36 +36,38 @@ class AuthInterceptor extends Interceptor {
   }
 
   @override
+  Future<void> onResponse(
+    Response response,
+    ResponseInterceptorHandler handler,
+  ) async {
+    if (_tokenProvider.isExpiredTokenResponse(response.data)) {
+      await _handleExpiredToken();
+    }
+    handler.next(response);
+  }
+
+  @override
   Future<void> onError(
     DioException err,
     ErrorInterceptorHandler handler,
   ) async {
-    if (err.response?.statusCode == 401) {
-      final body = err.response?.data;
-      final isExpired =
-          (body is String && body.contains('EXPIRED_TOKEN')) ||
-          (body is Map && body.toString().contains('EXPIRED_TOKEN'));
+    if (_tokenProvider.isExpiredTokenResponse(err.response?.data)) {
+      await _handleExpiredToken();
+    }
+    handler.next(err);
+  }
 
-      if (isExpired) {
-        await _sessionManager.clear();
+  Future<void> _handleExpiredToken() async {
+    await _sessionManager.clear();
 
-        // Afficher le dialog de re-login si on a un contexte disponible
-        final context = appNavigatorKey.currentContext;
-        if (context != null && context.mounted) {
-          Future.microtask(() async {
-            // Utiliser le callback personnalisé s'il existe, sinon afficher le dialog par défaut
-            if (onTokenExpired != null) {
-              await onTokenExpired!(context);
-            } else {
-              await showTokenExpiredDialog(context);
-            }
-          });
-        }
-
-        handler.next(err);
+    if (onTokenExpired != null) {
+      final context = appNavigatorKey.currentContext;
+      if (context != null && context.mounted) {
+        unawaited(onTokenExpired!(context));
         return;
       }
     }
-    handler.next(err);
+
+    unawaited(_tokenProvider.showExpiredTokenDialog());
   }
 }

@@ -17,13 +17,22 @@ mixin SafeCallMixin {
     } on AppException catch (e) {
       return failure(Failure.fromException(e));
     } on DioException catch (e) {
-      // Si l'ErrorInterceptor a déjà converti l'erreur
-      if (e.error is AppException) {
-        return failure(Failure.fromException(e.error as AppException));
-      }
-      return failure(UnknownFailure(e.message ?? 'Erreur réseau inconnue'));
+      return failure(Failure.fromException(exceptionFromDio(e)));
     } catch (e) {
       return failure(UnknownFailure(e.toString()));
     }
   }
+}
+
+AppException exceptionFromDio(DioException error) {
+  if (error.error is AppException) return error.error as AppException;
+
+  return switch (error.type) {
+    DioExceptionType.connectionTimeout ||
+    DioExceptionType.sendTimeout ||
+    DioExceptionType.receiveTimeout => const TimeoutException(),
+    DioExceptionType.connectionError => const NetworkException(),
+    DioExceptionType.cancel => const RequestCancelledException(),
+    _ => UnknownException(error.message ?? 'Erreur réseau inconnue'),
+  };
 }

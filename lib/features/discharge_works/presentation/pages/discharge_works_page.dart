@@ -2,393 +2,824 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_blue_plus_windows/flutter_blue_plus_windows.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:amex5/core/ble/ble_service.dart';
+import 'package:amex5/core/ble/widgets/ble_widgets.dart';
+import 'package:amex5/core/di/injection.dart';
+import 'package:amex5/core/theme/app_theme.dart';
+import 'package:amex5/features/agent_works/domain/repositories/agent_works_repository.dart';
+
 import '../../domain/entities/discharge_entities.dart';
-import '../bloc/discharge_works_bloc.dart';
+import '../bloc/discharge_works_cubit.dart';
 import '../widgets/discharge_widgets.dart';
-import '../../../../core/di/injection.dart';
 
 class DischargeWorksPage extends StatelessWidget {
   const DischargeWorksPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final bleService = getIt<BleService>();
     return BlocProvider(
-      create: (context) => getIt<DischargeWorksBloc>(),
-      child: const _DischargeWorksView(),
+      create: (_) =>
+          DischargeWorksCubit(getIt<AgentWorksRepository>(), bleService),
+      child: _DischargeWorksView(bleService: bleService),
     );
   }
 }
 
-class _DischargeWorksView extends StatelessWidget {
-  const _DischargeWorksView();
+class _DischargeWorksView extends StatefulWidget {
+  final BleService bleService;
+
+  const _DischargeWorksView({required this.bleService});
+
+  @override
+  State<_DischargeWorksView> createState() => _DischargeWorksViewState();
+}
+
+class _DischargeWorksViewState extends State<_DischargeWorksView> {
+  bool _initialScanRequested = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startInitialScan());
+  }
+
+  Future<void> _startInitialScan() async {
+    if (_initialScanRequested || widget.bleService.isConnected) return;
+    if (!widget.bleService.isBluetoothOn) return;
+    _initialScanRequested = true;
+    await widget.bleService.startScan();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return BlocListener<DischargeWorksBloc, DischargeWorksState>(
-      listener: _handleStateListener,
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        appBar: _buildAppBar(),
-        body: BlocBuilder<DischargeWorksBloc, DischargeWorksState>(
-          builder: (context, state) => _buildBody(context, state),
-        ),
-      ),
-    );
-  }
-
-  AppBar _buildAppBar() {
-    return AppBar(
-      backgroundColor: AppColors.surface,
-      titleSpacing: 20,
-      title: Row(
-        children: [
-          Container(width: 4, height: 20, color: AppColors.primary),
-          const SizedBox(width: 12),
-          const Text('DISCHARGE WORKS'),
-          const SizedBox(width: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              border: Border.all(color: AppColors.border),
-              borderRadius: BorderRadius.circular(2),
+    return BlocConsumer<DischargeWorksCubit, DischargeWorksCubitState>(
+      listener: (context, state) {
+        if (state.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.errorMessage!),
+              backgroundColor: AppColors.error,
             ),
-            child: const Text(
-              'v1.0',
-              style: TextStyle(
-                fontSize: 10,
-                color: AppColors.textDisabled,
-                letterSpacing: 1,
-              ),
+          );
+        }
+        if (state.successMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.successMessage!),
+              backgroundColor: AppColors.success,
             ),
-          ),
-        ],
-      ),
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: AppColors.border),
-      ),
-    );
-  }
-
-  Widget _buildBody(BuildContext context, DischargeWorksState state) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Panneau gauche : contrôles ──────────────────────────────────
-        SizedBox(
-          width: 340,
-          child: Container(
-            height: double.infinity,
-            decoration: const BoxDecoration(
-              color: AppColors.surface,
-              border: Border(right: BorderSide(color: AppColors.border)),
-            ),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildStatusHeader(state),
-                  const SizedBox(height: 20),
-                  _buildFilePickerCard(context, state),
-                  const SizedBox(height: 16),
-                  _buildUploadCard(context, state),
-                ],
-              ),
-            ),
-          ),
-        ),
-
-        // ── Panneau droit : preview / résultat ──────────────────────────
-        Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [_buildPreviewPanel(context, state)],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Status header ────────────────────────────────────────────────────────
-
-  Widget _buildStatusHeader(DischargeWorksState state) {
-    final badge = switch (state) {
-      DischargeWorksInitial() => StatusBadge.idle(),
-      DischargeWorksPickingFile() => StatusBadge.idle(),
-      DischargeWorksFileSelected() => StatusBadge.selected(),
-      DischargeWorksUploading() => StatusBadge.uploading(),
-      DischargeWorksSuccess() => StatusBadge.success(),
-      DischargeWorksError() => StatusBadge.error(),
-    };
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const Text('STATUT', style: AppTextStyles.labelSmall),
-        badge,
-      ],
-    );
-  }
-
-  // ── File picker card ─────────────────────────────────────────────────────
-
-  Widget _buildFilePickerCard(BuildContext context, DischargeWorksState state) {
-    final isUploading = state is DischargeWorksUploading;
-    DischargeFile? file;
-    if (state is DischargeWorksFileSelected) file = state.file;
-    if (state is DischargeWorksUploading) file = state.file;
-    if (state is DischargeWorksSuccess) file = state.file;
-    if (state is DischargeWorksError) file = state.file;
-
-    return IndustrialCard(
-      title: 'Sélection fichier',
-      icon: Icons.folder_open_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Zone de drop / click
-          _FileDropZone(
-            file: file,
-            enabled: !isUploading,
-            onTap: () =>
-                context.read<DischargeWorksBloc>().add(PickFileEvent()),
-          ),
-          if (file != null) ...[
-            const SizedBox(height: 12),
-            _FileInfoRow(
-              label: 'FICHIER',
-              value: file.name,
-              icon: Icons.insert_drive_file_outlined,
-            ),
-            const SizedBox(height: 6),
-            _FileInfoRow(
-              label: 'TAILLE',
-              value: file.sizeLabel,
-              icon: Icons.data_usage_outlined,
-            ),
-            const SizedBox(height: 6),
-            _FileInfoRow(
-              label: 'CLÉS JSON',
-              value: '${file.content.length} clé(s)',
-              icon: Icons.account_tree_outlined,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // ── Upload card ──────────────────────────────────────────────────────────
-
-  Widget _buildUploadCard(BuildContext context, DischargeWorksState state) {
-    final canUpload = state is DischargeWorksFileSelected;
-    final isUploading = state is DischargeWorksUploading;
-    final isSuccess = state is DischargeWorksSuccess;
-
-    return IndustrialCard(
-      title: 'Envoi API',
-      icon: Icons.cloud_upload_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Endpoint display
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.background,
-              border: Border.all(color: AppColors.border),
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                  child: const Text(
-                    'POST',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                const Expanded(
-                  child: Text(
-                    '/test_upload',
-                    style: AppTextStyles.mono,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          PrimaryActionButton(
-            label: isSuccess ? 'Renvoyer' : 'Lancer l\'upload',
-            icon: Icons.upload_outlined,
-            loading: isUploading,
-            onPressed: canUpload
-                ? () =>
-                      context.read<DischargeWorksBloc>().add(UploadFileEvent())
-                : null,
-          ),
-          const SizedBox(height: 10),
-          PrimaryActionButton(
-            label: 'Réinitialiser',
-            icon: Icons.refresh_outlined,
-            color: AppColors.surfaceVariant,
-            onPressed: isUploading
-                ? null
-                : () => context.read<DischargeWorksBloc>().add(ResetEvent()),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Preview panel ────────────────────────────────────────────────────────
-
-  Widget _buildPreviewPanel(BuildContext context, DischargeWorksState state) {
-    return switch (state) {
-      DischargeWorksInitial() => _EmptyPreview(),
-      DischargeWorksPickingFile() => const _LoadingPreview(
-        message: 'Ouverture du sélecteur de fichier…',
-      ),
-      DischargeWorksFileSelected(file: final f) => _JsonPreview(
-        title: 'APERÇU PAYLOAD',
-        json: f.content,
-        accentColor: AppColors.info,
-      ),
-      DischargeWorksUploading(file: final f) => _UploadingPreview(file: f),
-      DischargeWorksSuccess(result: final r, file: final f) => _SuccessPreview(
-        result: r,
-        file: f,
-      ),
-      DischargeWorksError(failure: final fail, file: final f) => _ErrorPreview(
-        message: fail.message,
-        file: f,
-      ),
-    };
-  }
-
-  void _handleStateListener(BuildContext context, DischargeWorksState state) {
-    if (state is DischargeWorksError && state.file == null) {
-      // Erreur au niveau du pick (pas de fichier préalable)
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
+          );
+        }
+      },
+      builder: (context, state) {
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Column(
             children: [
-              const Icon(Icons.error_outline, size: 16, color: AppColors.error),
-              const SizedBox(width: 8),
-              Expanded(child: Text(state.message)),
+              _buildAppBar(state),
+              Expanded(
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 380,
+                      child: _BleReceptionPanel(bleService: widget.bleService),
+                    ),
+                    Container(width: 1, color: AppColors.border),
+                    Expanded(child: _PayloadPanel(state: state)),
+                  ],
+                ),
+              ),
             ],
           ),
-          backgroundColor: AppColors.surfaceVariant,
-        ),
-      );
-    }
+        );
+      },
+    );
+  }
+
+  Widget _buildAppBar(DischargeWorksCubitState state) {
+    return ListenableBuilder(
+      listenable: widget.bleService,
+      builder: (context, _) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(bottom: BorderSide(color: AppColors.border)),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.download_for_offline_outlined,
+                size: 20,
+                color: AppColors.primary,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'DÉCHARGEMENT TRAVAUX',
+                style: AppTextStyles.headlineMedium.copyWith(
+                  fontSize: 15,
+                  letterSpacing: 1.5,
+                ),
+              ),
+              const SizedBox(width: 12),
+              _AdapterBadge(bleService: widget.bleService),
+              const SizedBox(width: 8),
+              BleStatusBadge(state: widget.bleService.connectionState),
+              const Spacer(),
+              if (state.payload != null)
+                Text(
+                  '${state.payload!.sentCount} / ${state.payload!.totalItems} envoyés',
+                  style: AppTextStyles.labelSmall.copyWith(
+                    color: state.payload!.allSent
+                        ? AppColors.success
+                        : AppColors.textSecondary,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
-// ── Sous-widgets internes ────────────────────────────────────────────────────
+class _BleReceptionPanel extends StatelessWidget {
+  final BleService bleService;
 
-class _FileDropZone extends StatelessWidget {
-  final DischargeFile? file;
-  final bool enabled;
-  final VoidCallback onTap;
+  const _BleReceptionPanel({required this.bleService});
 
-  const _FileDropZone({
-    required this.file,
-    required this.enabled,
-    required this.onTap,
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: bleService,
+      builder: (context, _) {
+        final isBusy =
+            bleService.connectionState == BleConnectionState.scanning ||
+            bleService.connectionState == BleConnectionState.connecting;
+
+        return Container(
+          height: double.infinity,
+          color: AppColors.surface,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: IndustrialCard(
+                  title: 'Réception BLE',
+                  icon: Icons.bluetooth_searching,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _InfoRow(
+                        icon: Icons.settings_bluetooth,
+                        label: 'BLUETOOTH',
+                        value: _adapterLabel(bleService.adapterState),
+                        color: bleService.isBluetoothReady
+                            ? AppColors.success
+                            : AppColors.warning,
+                      ),
+                      const SizedBox(height: 8),
+                      _InfoRow(
+                        icon: Icons.devices_other_outlined,
+                        label: 'APPAREIL',
+                        value:
+                            bleService.connectedDevice?.name ??
+                            'Aucun appareil connecté',
+                        color: bleService.isConnected
+                            ? AppColors.success
+                            : AppColors.textSecondary,
+                      ),
+                      if (bleService.errorMessage != null) ...[
+                        const SizedBox(height: 12),
+                        _InlineError(message: bleService.errorMessage!),
+                      ],
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: PrimaryActionButton(
+                              label:
+                                  bleService.connectionState ==
+                                      BleConnectionState.scanning
+                                  ? 'Scan...'
+                                  : 'Scanner',
+                              icon: Icons.radar_outlined,
+                              loading:
+                                  bleService.connectionState ==
+                                  BleConnectionState.scanning,
+                              onPressed: isBusy || bleService.isConnected
+                                  ? null
+                                  : bleService.startScan,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 46,
+                            height: 44,
+                            child: OutlinedButton(
+                              onPressed: bleService.isConnected
+                                  ? bleService.disconnect
+                                  : null,
+                              style: OutlinedButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                side: const BorderSide(color: AppColors.border),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              child: const Icon(
+                                Icons.bluetooth_disabled,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                decoration: const BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  border: Border.symmetric(
+                    horizontal: BorderSide(color: AppColors.border),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.memory_outlined,
+                      size: 15,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${bleService.scanResults.length} appareil(s) détecté(s)',
+                      style: AppTextStyles.labelSmall,
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: bleService.isConnected
+                    ? _ConnectedDeviceView(bleService: bleService)
+                    : _ScanResultsView(bleService: bleService),
+              ),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: const BoxDecoration(
+                  color: AppColors.surfaceVariant,
+                  border: Border(top: BorderSide(color: AppColors.border)),
+                ),
+                child: const Text(
+                  'ÉCOUTE JSON BLE ACTIVE APRÈS CONNEXION',
+                  style: AppTextStyles.bodyMedium,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _adapterLabel(BluetoothAdapterState state) {
+    return switch (state) {
+      BluetoothAdapterState.on => 'Actif',
+      BluetoothAdapterState.off => 'Désactivé',
+      BluetoothAdapterState.turningOn => 'Activation',
+      BluetoothAdapterState.turningOff => 'Désactivation',
+      BluetoothAdapterState.unavailable => 'Indisponible',
+      BluetoothAdapterState.unauthorized => 'Non autorisé',
+      BluetoothAdapterState.unknown => 'Inconnu',
+    };
+  }
+}
+
+class _ScanResultsView extends StatelessWidget {
+  final BleService bleService;
+
+  const _ScanResultsView({required this.bleService});
+
+  @override
+  Widget build(BuildContext context) {
+    if (bleService.connectionState == BleConnectionState.scanning &&
+        bleService.scanResults.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+
+    if (bleService.scanResults.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'AUCUN APPAREIL DÉTECTÉ',
+            style: AppTextStyles.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: bleService.scanResults.length,
+      itemBuilder: (context, index) {
+        final device = bleService.scanResults[index];
+        return BleDeviceTile(
+          device: device,
+          onConnect: () => bleService.connectToDevice(device),
+        );
+      },
+    );
+  }
+}
+
+class _ConnectedDeviceView extends StatelessWidget {
+  final BleService bleService;
+
+  const _ConnectedDeviceView({required this.bleService});
+
+  @override
+  Widget build(BuildContext context) {
+    final device = bleService.connectedDevice;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.bluetooth_connected,
+              size: 42,
+              color: AppColors.success,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              device?.name ?? 'Appareil connecté',
+              style: AppTextStyles.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              device?.id ?? '',
+              style: AppTextStyles.mono.copyWith(fontSize: 10),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PayloadPanel extends StatelessWidget {
+  final DischargeWorksCubitState state;
+
+  const _PayloadPanel({required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final payload = state.payload;
+    if (payload == null) {
+      return const _WaitingPayloadView();
+    }
+
+    return Column(
+      children: [
+        _MetricsHeader(payload: payload, state: state),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _WorksListPanel(lines: payload.works)),
+              Container(width: 1, color: AppColors.border),
+              Expanded(
+                child: _CheckItemsListPanel(lines: payload.checkItemsWorks),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _WaitingPayloadView extends StatelessWidget {
+  const _WaitingPayloadView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.data_object_outlined,
+            size: 48,
+            color: AppColors.textDisabled.withValues(alpha: 0.8),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'AUCUNE DONNÉE JSON REÇUE',
+            style: AppTextStyles.labelSmall,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'WORKS: 0 • CHECK_ITEMS_WORKS: 0',
+            style: AppTextStyles.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricsHeader extends StatelessWidget {
+  final DischargePayload payload;
+  final DischargeWorksCubitState state;
+
+  const _MetricsHeader({required this.payload, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              _MetricTile(
+                label: 'TRAVAUX',
+                value: '${payload.works.length}',
+                icon: Icons.work_outline,
+              ),
+              const SizedBox(width: 10),
+              _MetricTile(
+                label: 'CHECK ITEMS WO',
+                value: '${payload.checkItemsWorks.length}',
+                icon: Icons.fact_check_outlined,
+              ),
+              const SizedBox(width: 10),
+              _MetricTile(
+                label: 'CHECKLISTS',
+                value: '${payload.totalChecklistItems}',
+                icon: Icons.checklist_outlined,
+              ),
+              const SizedBox(width: 10),
+              _MetricTile(
+                label: 'TAILLE',
+                value: payload.sizeLabel,
+                icon: Icons.data_usage_outlined,
+              ),
+              const Spacer(),
+              SizedBox(
+                width: 170,
+                child: PrimaryActionButton(
+                  label: state.isUploadingAll ? 'Envoi...' : 'Tout envoyer',
+                  icon: Icons.cloud_upload_outlined,
+                  loading: state.isUploadingAll,
+                  onPressed: state.canUploadAll
+                      ? context.read<DischargeWorksCubit>().uploadAll
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 46,
+                height: 44,
+                child: OutlinedButton(
+                  onPressed: state.isUploadingAll
+                      ? null
+                      : context.read<DischargeWorksCubit>().resetPayload,
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  child: const Icon(Icons.refresh_outlined, size: 18),
+                ),
+              ),
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 46,
+                height: 44,
+                child: OutlinedButton(
+                  onPressed: () => _copyRawJson(context, payload.rawJson),
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  child: const Icon(Icons.copy_outlined, size: 18),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              minHeight: 3,
+              value: payload.totalItems == 0
+                  ? 0
+                  : payload.sentCount / payload.totalItems,
+              color: payload.errorCount > 0
+                  ? AppColors.error
+                  : AppColors.success,
+              backgroundColor: AppColors.border,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _copyRawJson(BuildContext context, Map<String, dynamic> rawJson) {
+    final pretty = const JsonEncoder.withIndent('  ').convert(rawJson);
+    Clipboard.setData(ClipboardData(text: pretty));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('JSON reçu copié dans le presse-papier')),
+    );
+  }
+}
+
+class _WorksListPanel extends StatelessWidget {
+  final List<DischargeWorkLine> lines;
+
+  const _WorksListPanel({required this.lines});
+
+  @override
+  Widget build(BuildContext context) {
+    return _ListPanel(
+      title: 'WORKS',
+      count: lines.length,
+      icon: Icons.work_outline,
+      emptyMessage: 'Aucun travail dans le JSON reçu.',
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: lines.length,
+        itemBuilder: (context, index) {
+          final line = lines[index];
+          return _UploadLineTile(
+            title: line.title,
+            subtitle: line.work.woDesc ?? line.work.objectDesc ?? '-',
+            detail:
+                '${line.work.checkListItems?.length ?? 0} item(s) checklist',
+            status: line.status,
+            errorMessage: line.errorMessage,
+            onSend: () =>
+                context.read<DischargeWorksCubit>().uploadWork(line.id),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _CheckItemsListPanel extends StatelessWidget {
+  final List<DischargeCheckItemLine> lines;
+
+  const _CheckItemsListPanel({required this.lines});
+
+  @override
+  Widget build(BuildContext context) {
+    return _ListPanel(
+      title: 'CHECK_ITEMS_WORKS',
+      count: lines.length,
+      icon: Icons.fact_check_outlined,
+      emptyMessage: 'Aucun check item work dans le JSON reçu.',
+      child: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: lines.length,
+        itemBuilder: (context, index) {
+          final line = lines[index];
+          final checkItem = line.checkItem;
+          return _UploadLineTile(
+            title: line.title,
+            subtitle: checkItem.woDesc ?? '-',
+            detail:
+                'WO ${checkItem.woCode ?? '—'} • Mobile ${checkItem.woMobileUuid ?? '—'}',
+            status: line.status,
+            errorMessage: line.errorMessage,
+            onSend: () =>
+                context.read<DischargeWorksCubit>().uploadCheckItem(line.id),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ListPanel extends StatelessWidget {
+  final String title;
+  final int count;
+  final IconData icon;
+  final String emptyMessage;
+  final Widget child;
+
+  const _ListPanel({
+    required this.title,
+    required this.count,
+    required this.icon,
+    required this.emptyMessage,
+    required this.child,
   });
 
   @override
   Widget build(BuildContext context) {
-    final hasFile = file != null;
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        height: 100,
-        decoration: BoxDecoration(
-          color: hasFile
-              ? AppColors.primary.withOpacity(0.06)
-              : AppColors.background,
-          border: Border.all(
-            color: hasFile ? AppColors.primary : AppColors.border,
-            style: hasFile ? BorderStyle.solid : BorderStyle.solid,
-            width: hasFile ? 1.5 : 1,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          color: AppColors.surfaceVariant,
+          child: Row(
+            children: [
+              Icon(icon, size: 15, color: AppColors.primary),
+              const SizedBox(width: 8),
+              Text(title, style: AppTextStyles.labelSmall),
+              const Spacer(),
+              Text('$count', style: AppTextStyles.monoAccent),
+            ],
           ),
-          borderRadius: BorderRadius.circular(4),
         ),
-        child: Center(
-          child: enabled
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      hasFile
-                          ? Icons.check_circle_outline
-                          : Icons.upload_file_outlined,
-                      size: 28,
-                      color: hasFile
-                          ? AppColors.primary
-                          : AppColors.textDisabled,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      hasFile
-                          ? 'CLIQUER POUR CHANGER'
-                          : 'CLIQUER POUR SÉLECTIONNER',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.2,
-                        color: hasFile
-                            ? AppColors.primary
-                            : AppColors.textDisabled,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Fichiers JSON acceptés',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textDisabled,
-                      ),
-                    ),
-                  ],
+        Expanded(
+          child: count == 0
+              ? Center(
+                  child: Text(
+                    emptyMessage,
+                    style: AppTextStyles.bodyMedium,
+                    textAlign: TextAlign.center,
+                  ),
                 )
-              : const SizedBox.shrink(),
+              : child,
         ),
-      ),
+      ],
     );
   }
 }
 
-class _FileInfoRow extends StatelessWidget {
+class _UploadLineTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final String detail;
+  final DischargeUploadStatus status;
+  final String? errorMessage;
+  final VoidCallback onSend;
+
+  const _UploadLineTile({
+    required this.title,
+    required this.subtitle,
+    required this.detail,
+    required this.status,
+    required this.onSend,
+    this.errorMessage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = _statusColor(status);
+    final isSending = status == DischargeUploadStatus.sending;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: statusColor.withValues(alpha: 0.35)),
+            ),
+            child: isSending
+                ? const Padding(
+                    padding: EdgeInsets.all(7),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.accent,
+                    ),
+                  )
+                : Icon(_statusIcon(status), size: 16, color: statusColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: AppTextStyles.titleMedium.copyWith(fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: AppTextStyles.bodyMedium.copyWith(fontSize: 12),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  detail,
+                  style: AppTextStyles.mono.copyWith(fontSize: 10),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 5),
+                  Text(
+                    errorMessage!,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      color: AppColors.error,
+                      fontSize: 11,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            height: 32,
+            child: OutlinedButton(
+              onPressed: isSending ? null : onSend,
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                side: BorderSide(color: statusColor.withValues(alpha: 0.6)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+              child: Text(
+                status == DischargeUploadStatus.sent ? 'RENVOYER' : 'ENVOYER',
+                style: const TextStyle(fontSize: 10),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _statusColor(DischargeUploadStatus status) {
+    return switch (status) {
+      DischargeUploadStatus.pending => AppColors.textSecondary,
+      DischargeUploadStatus.sending => AppColors.accent,
+      DischargeUploadStatus.sent => AppColors.success,
+      DischargeUploadStatus.error => AppColors.error,
+    };
+  }
+
+  IconData _statusIcon(DischargeUploadStatus status) {
+    return switch (status) {
+      DischargeUploadStatus.pending => Icons.schedule_outlined,
+      DischargeUploadStatus.sending => Icons.sync,
+      DischargeUploadStatus.sent => Icons.check_circle_outline,
+      DischargeUploadStatus.error => Icons.error_outline,
+    };
+  }
+}
+
+class _MetricTile extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
 
-  const _FileInfoRow({
+  const _MetricTile({
     required this.label,
     required this.value,
     required this.icon,
@@ -396,16 +827,67 @@ class _FileInfoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 118),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: AppTextStyles.labelSmall.copyWith(fontSize: 9),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: AppTextStyles.titleMedium.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 12, color: AppColors.textDisabled),
+        Icon(icon, size: 14, color: color),
         const SizedBox(width: 8),
         Text(label, style: AppTextStyles.labelSmall),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             value,
-            style: AppTextStyles.mono,
+            style: AppTextStyles.bodyMedium.copyWith(color: color),
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -414,183 +896,33 @@ class _FileInfoRow extends StatelessWidget {
   }
 }
 
-class _EmptyPreview extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 300,
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.article_outlined,
-              size: 40,
-              color: AppColors.textDisabled,
-            ),
-            SizedBox(height: 12),
-            Text('AUCUN FICHIER SÉLECTIONNÉ', style: AppTextStyles.labelSmall),
-            SizedBox(height: 6),
-            Text(
-              'Sélectionnez un fichier JSON pour voir son contenu',
-              style: AppTextStyles.bodyMedium,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LoadingPreview extends StatelessWidget {
+class _InlineError extends StatelessWidget {
   final String message;
-  const _LoadingPreview({required this.message});
+
+  const _InlineError({required this.message});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 200,
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.card,
-        border: Border.all(color: AppColors.border),
+        color: AppColors.error.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.error.withValues(alpha: 0.35)),
       ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Text(message, style: AppTextStyles.bodyMedium),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _JsonPreview extends StatelessWidget {
-  final String title;
-  final Map<String, dynamic> json;
-  final Color accentColor;
-
-  const _JsonPreview({
-    required this.title,
-    required this.json,
-    required this.accentColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    const encoder = JsonEncoder.withIndent('  ');
-    final pretty = encoder.convert(json);
-
-    return IndustrialCard(
-      title: title,
-      icon: Icons.data_object_outlined,
-      actions: [
-        GestureDetector(
-          onTap: () {
-            Clipboard.setData(ClipboardData(text: pretty));
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Copié dans le presse-papier')),
-            );
-          },
-          child: const Row(
-            children: [
-              Icon(
-                Icons.copy_outlined,
-                size: 12,
-                color: AppColors.textDisabled,
-              ),
-              SizedBox(width: 4),
-              Text(
-                'COPIER',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textDisabled,
-                  letterSpacing: 1,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-      child: Container(
-        constraints: const BoxConstraints(maxHeight: 500),
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.circular(3),
-        ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(12),
-          child: SelectableText(
-            pretty,
-            style: AppTextStyles.mono.copyWith(fontSize: 11),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _UploadingPreview extends StatelessWidget {
-  final DischargeFile file;
-  const _UploadingPreview({required this.file});
-
-  @override
-  Widget build(BuildContext context) {
-    return IndustrialCard(
-      title: 'Envoi en cours',
-      icon: Icons.upload_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 20),
-          const Center(
-            child: SizedBox(
-              width: 36,
-              height: 36,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: AppColors.accent,
+          const Icon(Icons.error_outline, size: 15, color: AppColors.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.error,
+                fontSize: 12,
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-          Center(
-            child: Text(
-              'TRANSMISSION DE ${file.name.toUpperCase()}',
-              style: AppTextStyles.labelSmall.copyWith(
-                color: AppColors.accent,
-                letterSpacing: 1.5,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Center(
-            child: Text(
-              'POST /test_upload  •  ${file.sizeLabel}',
-              style: AppTextStyles.bodyMedium,
-            ),
-          ),
-          const SizedBox(height: 20),
-          const LinearProgressIndicator(
-            backgroundColor: AppColors.border,
-            color: AppColors.accent,
-            minHeight: 2,
           ),
         ],
       ),
@@ -598,148 +930,42 @@ class _UploadingPreview extends StatelessWidget {
   }
 }
 
-class _SuccessPreview extends StatelessWidget {
-  final DischargeUploadResult result;
-  final DischargeFile file;
+class _AdapterBadge extends StatelessWidget {
+  final BleService bleService;
 
-  const _SuccessPreview({required this.result, required this.file});
+  const _AdapterBadge({required this.bleService});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Banner succès
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.success.withOpacity(0.08),
-            border: Border.all(color: AppColors.success.withOpacity(0.3)),
-            borderRadius: BorderRadius.circular(4),
+    final ready = bleService.isBluetoothReady;
+    final color = ready ? AppColors.success : AppColors.warning;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            ready ? Icons.bluetooth : Icons.bluetooth_disabled,
+            size: 12,
+            color: color,
           ),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.verified_outlined,
-                color: AppColors.success,
-                size: 20,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'UPLOAD RÉUSSI',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.success,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      result.message ?? 'Données transmises avec succès.',
-                      style: AppTextStyles.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                _formatTime(result.uploadedAt),
-                style: AppTextStyles.labelSmall,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        // Réponse serveur
-        if (result.responseData != null)
-          _JsonPreview(
-            title: 'Réponse serveur',
-            json: result.responseData!,
-            accentColor: AppColors.success,
-          )
-        else
-          IndustrialCard(
-            title: 'Réponse serveur',
-            icon: Icons.cloud_done_outlined,
-            child: const Center(
-              child: Padding(
-                padding: EdgeInsets.all(20),
-                child: Text(
-                  'Aucune donnée retournée par le serveur.',
-                  style: AppTextStyles.bodyMedium,
-                ),
-              ),
+          const SizedBox(width: 6),
+          Text(
+            ready ? 'BLE ACTIF' : 'BLE INACTIF',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: color,
+              letterSpacing: 1.1,
             ),
           ),
-      ],
-    );
-  }
-
-  String _formatTime(DateTime dt) {
-    final h = dt.hour.toString().padLeft(2, '0');
-    final m = dt.minute.toString().padLeft(2, '0');
-    final s = dt.second.toString().padLeft(2, '0');
-    return '$h:$m:$s';
-  }
-}
-
-class _ErrorPreview extends StatelessWidget {
-  final String message;
-  final DischargeFile? file;
-
-  const _ErrorPreview({required this.message, this.file});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.error.withOpacity(0.08),
-            border: Border.all(color: AppColors.error.withOpacity(0.3)),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.error_outline, color: AppColors.error, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'ERREUR D\'UPLOAD',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.error,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(message, style: AppTextStyles.bodyMedium),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (file != null) ...[
-          const SizedBox(height: 16),
-          _JsonPreview(
-            title: 'Payload envoyé',
-            json: file!.content,
-            accentColor: AppColors.error,
-          ),
         ],
-      ],
+      ),
     );
   }
 }

@@ -15,6 +15,7 @@ sealed class Failure {
       NetworkException() => NetworkFailure(exception.message),
       TimeoutException() => TimeoutFailure(exception.message),
       RequestCancelledException() => CancelledFailure(exception.message),
+      TokenExpiredException() => TokenExpiredFailure(exception.message),
       UnauthorizedException() => UnauthorizedFailure(exception.message),
       ForbiddenException() => ForbiddenFailure(exception.message),
       NotFoundException() => NotFoundFailure(exception.message),
@@ -30,6 +31,7 @@ sealed class Failure {
         exception.statusCode,
       ),
       ParseException() => ParseFailure(exception.message),
+      InvalidResponseException() => InvalidResponseFailure(exception.message),
       CacheException() => CacheFailure(exception.message),
       UnknownException() => UnknownFailure(exception.message),
     };
@@ -52,6 +54,10 @@ class CancelledFailure extends Failure {
 
 class UnauthorizedFailure extends Failure {
   const UnauthorizedFailure([super.message = 'Non autorisé.']);
+}
+
+class TokenExpiredFailure extends Failure {
+  const TokenExpiredFailure([super.message = 'Session expirée.']);
 }
 
 class ForbiddenFailure extends Failure {
@@ -86,6 +92,12 @@ class ServerFailure extends Failure {
 
 class ParseFailure extends Failure {
   const ParseFailure([super.message = 'Erreur de parsing.']);
+}
+
+class InvalidResponseFailure extends Failure {
+  const InvalidResponseFailure([
+    super.message = 'Format de réponse inattendu.',
+  ]);
 }
 
 class CacheFailure extends Failure {
