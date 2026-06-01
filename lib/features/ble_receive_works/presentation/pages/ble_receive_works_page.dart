@@ -262,7 +262,7 @@ class _WorksPanel extends StatelessWidget {
           return Column(
             children: [
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(8),
                 color: AppColors.surface,
                 child: Row(
                   children: [
@@ -272,9 +272,11 @@ class _WorksPanel extends StatelessWidget {
                     ),
                     const Spacer(),
                     if (!state.isSubmitting && !state.allSent)
-                      ElevatedButton.icon(
+                      FilledButton.icon(
                         onPressed: () => context.read<BleReceiveWorksBloc>().add(BleReceiveSubmitAllEvent()),
                         icon: const Icon(Icons.cloud_upload, size: 16),
+                        style: FilledButton.styleFrom(textStyle: TextStyle(fontSize: 12),),
+                      
                         label: const Text('TOUT ENVOYER'),
                       )
                     else if (state.allSent)
