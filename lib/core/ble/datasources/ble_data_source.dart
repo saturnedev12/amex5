@@ -167,7 +167,7 @@ class WindowsBleClientDataSource implements BleDataSource {
 
     final id = result.device.remoteId.toString();
     final suffix = id.length <= 5 ? id : id.substring(id.length - 5);
-    return 'RONDEX $suffix';
+    return 'RDX $suffix';
   }
 
   @override
