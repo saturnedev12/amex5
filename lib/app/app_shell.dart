@@ -7,6 +7,7 @@ import '../core/config/app_config.dart';
 import '../core/theme/app_theme.dart';
 import '../features/agent_works/presentation/pages/agent_works_page.dart';
 import '../features/ble_receive_works/presentation/pages/ble_receive_works_page.dart';
+import '../features/discharge_files/presentation/pages/discharge_files_page.dart';
 import '../features/discharge_works/presentation/pages/discharge_works_page.dart';
 import '../features/settings/presentation/pages/settings_page.dart';
 import '../core/di/injection.dart';
@@ -32,6 +33,11 @@ class _AppShellState extends State<AppShell> {
       label: 'Déchargement travaux',
     ),
     _NavItem(
+      icon: Icons.perm_media_outlined,
+      activeIcon: Icons.perm_media,
+      label: 'Déchargement fichier',
+    ),
+    _NavItem(
       icon: Icons.work_outline,
       activeIcon: Icons.work,
       label: 'Chargement travaux',
@@ -39,7 +45,7 @@ class _AppShellState extends State<AppShell> {
     _NavItem(
       icon: Icons.bluetooth_outlined,
       activeIcon: Icons.bluetooth,
-      label: 'Gestion BLE',
+      label: 'Gestion bluetooth',
     ),
     _NavItem(
       icon: Icons.settings_outlined,
@@ -50,6 +56,7 @@ class _AppShellState extends State<AppShell> {
 
   static const List<Widget> _pages = [
     DischargeWorksPage(),
+    DischargeFilesPage(),
     AgentWorksPage(),
     BleReceiveWorksPage(),
     SettingsPage(),

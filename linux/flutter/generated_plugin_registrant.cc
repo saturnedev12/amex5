@@ -7,9 +7,17 @@
 #include "generated_plugin_registrant.h"
 
 #include <isar_community_flutter_libs/isar_flutter_libs_plugin.h>
+#include <media_kit_video/media_kit_video_plugin.h>
+#include <volume_controller/volume_controller_plugin.h>
 
 void fl_register_plugins(FlPluginRegistry* registry) {
   g_autoptr(FlPluginRegistrar) isar_community_flutter_libs_registrar =
       fl_plugin_registry_get_registrar_for_plugin(registry, "IsarFlutterLibsPlugin");
   isar_flutter_libs_plugin_register_with_registrar(isar_community_flutter_libs_registrar);
+  g_autoptr(FlPluginRegistrar) media_kit_video_registrar =
+      fl_plugin_registry_get_registrar_for_plugin(registry, "MediaKitVideoPlugin");
+  media_kit_video_plugin_register_with_registrar(media_kit_video_registrar);
+  g_autoptr(FlPluginRegistrar) volume_controller_registrar =
+      fl_plugin_registry_get_registrar_for_plugin(registry, "VolumeControllerPlugin");
+  volume_controller_plugin_register_with_registrar(volume_controller_registrar);
 }

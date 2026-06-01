@@ -32,7 +32,7 @@ class _BleManagerView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bleService = context.watch<BleService>();
-    
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
@@ -55,10 +55,7 @@ class _BleManagerView extends StatelessWidget {
                 ),
                 Container(width: 1, color: AppColors.border),
                 // Panneau droit: réception travaux
-                Expanded(
-                  flex: 2,
-                  child: const _WorksPanel(),
-                ),
+                Expanded(flex: 2, child: const _WorksPanel()),
               ],
             ),
           ),
@@ -79,7 +76,7 @@ class _BleManagerView extends StatelessWidget {
           const Icon(Icons.bluetooth, size: 20, color: AppColors.primary),
           const SizedBox(width: 10),
           Text(
-            'GESTION BLE',
+            'GESTION BLUETOOTH',
             style: AppTextStyles.headlineMedium.copyWith(
               fontSize: 15,
               letterSpacing: 1.5,
@@ -103,7 +100,10 @@ class _BleManagerView extends StatelessWidget {
             children: [
               const Text(
                 'Connexion Appareil',
-                style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
               const Spacer(),
               if (bleService.isConnected)
@@ -111,7 +111,9 @@ class _BleManagerView extends StatelessWidget {
                   onPressed: bleService.disconnect,
                   icon: const Icon(Icons.bluetooth_disabled, size: 16),
                   label: const Text('DÉCONNECTER'),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                  ),
                 )
               else
                 ElevatedButton.icon(
@@ -134,7 +136,7 @@ class _BleManagerView extends StatelessWidget {
               bleService.errorMessage!,
               style: const TextStyle(color: AppColors.error, fontSize: 13),
             ),
-          ]
+          ],
         ],
       ),
     );
@@ -152,7 +154,11 @@ class _BleManagerView extends StatelessWidget {
               SizedBox(width: 8),
               Text(
                 'JOURNAL BLE',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -199,7 +205,11 @@ class _TestJsonInputState extends State<_TestJsonInput> {
           Expanded(
             child: TextField(
               controller: _controller,
-              style: const TextStyle(fontSize: 12, fontFamily: 'monospace', color: AppColors.textPrimary),
+              style: const TextStyle(
+                fontSize: 12,
+                fontFamily: 'monospace',
+                color: AppColors.textPrimary,
+              ),
               decoration: const InputDecoration(
                 hintText: 'Saisir du JSON à envoyer...',
                 isDense: true,
@@ -212,18 +222,22 @@ class _TestJsonInputState extends State<_TestJsonInput> {
             onPressed: widget.bleService.isConnected
                 ? () {
                     try {
-                      final parsed = jsonDecode(_controller.text) as Map<String, dynamic>;
+                      final parsed =
+                          jsonDecode(_controller.text) as Map<String, dynamic>;
                       widget.bleService.sendJson(parsed);
                       _controller.clear();
                     } catch (e) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('JSON Invalide: $e'), backgroundColor: AppColors.error),
+                        SnackBar(
+                          content: Text('JSON Invalide: $e'),
+                          backgroundColor: AppColors.error,
+                        ),
                       );
                     }
                   }
                 : null,
             icon: const Icon(Icons.send, color: AppColors.primary),
-          )
+          ),
         ],
       ),
     );
@@ -247,7 +261,7 @@ class _WorksPanel extends StatelessWidget {
             ),
           );
         }
-        
+
         if (state is BleReceiveError) {
           return Center(
             child: Text(
@@ -268,19 +282,27 @@ class _WorksPanel extends StatelessWidget {
                   children: [
                     Text(
                       '${state.works.length} travaux reçus',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                     const Spacer(),
                     if (!state.isSubmitting && !state.allSent)
                       ElevatedButton.icon(
-                        onPressed: () => context.read<BleReceiveWorksBloc>().add(BleReceiveSubmitAllEvent()),
+                        onPressed: () => context
+                            .read<BleReceiveWorksBloc>()
+                            .add(BleReceiveSubmitAllEvent()),
                         icon: const Icon(Icons.cloud_upload, size: 16),
                         label: const Text('TOUT ENVOYER'),
                       )
                     else if (state.allSent)
                       const Text(
                         'TOUT ENVOYÉ',
-                        style: TextStyle(color: AppColors.success, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          color: AppColors.success,
+                          fontWeight: FontWeight.bold,
+                        ),
                       )
                     else
                       const CircularProgressIndicator(),
@@ -294,7 +316,8 @@ class _WorksPanel extends StatelessWidget {
                   itemBuilder: (context, i) {
                     final wo = state.works[i];
                     final code = wo.woCode ?? '';
-                    final status = state.sendStatus[code] ?? WorkSendStatus.pending;
+                    final status =
+                        state.sendStatus[code] ?? WorkSendStatus.pending;
                     return Container(
                       margin: const EdgeInsets.symmetric(vertical: 4),
                       padding: const EdgeInsets.all(12),
@@ -306,18 +329,28 @@ class _WorksPanel extends StatelessWidget {
                       child: Row(
                         children: [
                           Icon(
-                            status == WorkSendStatus.sent ? Icons.check_circle :
-                            status == WorkSendStatus.error ? Icons.error :
-                            status == WorkSendStatus.sending ? Icons.sync : Icons.schedule,
-                            color: status == WorkSendStatus.sent ? AppColors.success :
-                                   status == WorkSendStatus.error ? AppColors.error : AppColors.textSecondary,
+                            status == WorkSendStatus.sent
+                                ? Icons.check_circle
+                                : status == WorkSendStatus.error
+                                ? Icons.error
+                                : status == WorkSendStatus.sending
+                                ? Icons.sync
+                                : Icons.schedule,
+                            color: status == WorkSendStatus.sent
+                                ? AppColors.success
+                                : status == WorkSendStatus.error
+                                ? AppColors.error
+                                : AppColors.textSecondary,
                             size: 16,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'WO ${wo.woCode ?? '—'}: ${wo.woDesc ?? '—'}',
-                              style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textPrimary,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
