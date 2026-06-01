@@ -51,7 +51,6 @@ bool _uuidMatches(Guid uuid, String expected) {
 const int _kDefaultChunkSize = 20;
 const int _kMaxChunkSize = 244;
 const int _kScanSeconds = 30;
-const Duration _kRemoveIfGone = Duration(seconds: 20);
 const Duration _kAckTimeout = Duration(seconds: 20);
 
 abstract class BleDataSource {
@@ -80,7 +79,7 @@ class WindowsBleClientDataSource implements BleDataSource {
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<List<int>>? _characteristicSubscription;
   StreamSubscription<BluetoothConnectionState>? _connectionStateSubscription;
-  int _disconnectProbeToken = 0;
+
 
   /// Stocke les BluetoothDevice bruts trouvés lors du scan (clé = remoteId).
   final Map<String, BluetoothDevice> _foundDevicesMap = {};
@@ -115,7 +114,6 @@ class WindowsBleClientDataSource implements BleDataSource {
 
     await FlutterBluePlus.startScan(
       timeout: const Duration(seconds: _kScanSeconds),
-      removeIfGone: _kRemoveIfGone,
     );
 
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
@@ -141,20 +139,25 @@ class WindowsBleClientDataSource implements BleDataSource {
   }
 
   bool _isExpectedAndroidPeripheral(ScanResult result) {
+    // Rejeter les résultats sans données d'advertising
+    // (appareils appairés classiques, pas de serveur BLE actif)
+    if (result.advertisementData.advName.isEmpty &&
+        result.advertisementData.serviceUuids.isEmpty) {
+      return false;
+    }
+
     final serviceMatch = result.advertisementData.serviceUuids.any(
       (uuid) => _uuidMatches(uuid, _kServiceUuid),
     );
     if (serviceMatch) return true;
 
-    final names = <String>{
-      result.advertisementData.advName.trim(),
-      result.device.platformName.trim(),
-    }..removeWhere((name) => name.isEmpty);
+    // Utiliser UNIQUEMENT le nom d'advertising, pas le platformName
+    // (qui peut provenir du cache Windows Bluetooth Classic)
+    final advName = result.advertisementData.advName.trim();
+    if (advName.isEmpty) return false;
 
-    return names.any(
-      (name) => _kAdvertisingNamePrefixes.any(
-        (prefix) => name.toUpperCase().startsWith(prefix),
-      ),
+    return _kAdvertisingNamePrefixes.any(
+      (prefix) => advName.toUpperCase().startsWith(prefix),
     );
   }
 
@@ -189,6 +192,14 @@ class WindowsBleClientDataSource implements BleDataSource {
     }
 
     await stopScan();
+
+    // Nettoyage anti-cache GATT obsolète :
+    // Déconnecter tout appareil précédent et vider l'état local.
+    try {
+      await _connectedDevice?.disconnect();
+    } catch (_) {}
+    _markDisconnected();
+
     _connectedDevice = btDevice;
     _receiveBuffer.clear();
 
@@ -248,15 +259,14 @@ class WindowsBleClientDataSource implements BleDataSource {
 
     for (var attempt = 1; attempt <= 3; attempt++) {
       try {
-        try {
-          await device
-              .connect(autoConnect: false, timeout: const Duration(seconds: 6))
-              .timeout(const Duration(seconds: 6));
-        } catch (e) {
-          debugPrint(
-            'BLE — WinBle.connect tentative $attempt sans confirmation : $e',
-          );
-        }
+        await device
+            .connect(autoConnect: false, timeout: const Duration(seconds: 8))
+            .timeout(const Duration(seconds: 10));
+        debugPrint('BLE — Connexion GATT établie (tentative $attempt)');
+
+        // Délai de stabilisation post-connexion.
+        // Windows a besoin de temps pour finaliser la session GATT.
+        await Future.delayed(const Duration(milliseconds: 800));
 
         final services = await _discoverServicesWithRetry(device);
         return services;
@@ -323,14 +333,8 @@ class WindowsBleClientDataSource implements BleDataSource {
     final properties = characteristic.properties;
     if (!properties.notify && !properties.indicate) {
       debugPrint(
-        'BLE — Propriétés notify/indicate non confirmées par Windows. '
-        'Tentative d’abonnement quand même sur $_kCharUuid.',
-      );
-    }
-    if (!properties.write && !properties.writeWithoutResponse) {
-      debugPrint(
-        'BLE — Propriétés write non confirmées par Windows. '
-        'Tentative d’écriture avec réponse quand même sur $_kCharUuid.',
+        'BLE — Note : win_ble ne confirme pas notify/indicate pour $_kCharUuid. '
+        'C\'est un comportement connu — l\'abonnement fonctionnera quand même.',
       );
     }
   }
@@ -338,28 +342,11 @@ class WindowsBleClientDataSource implements BleDataSource {
   void _startConnectionMonitor(BluetoothDevice device) {
     unawaited(_connectionStateSubscription?.cancel());
     _connectionStateSubscription = device.connectionState.listen((state) {
-      if (state == BluetoothConnectionState.connected) return;
-      final token = ++_disconnectProbeToken;
-      unawaited(_probeDisconnect(device, token));
+      debugPrint('BLE — État connexion Windows : $state');
+      if (state == BluetoothConnectionState.disconnected) {
+        _markDisconnected();
+      }
     });
-  }
-
-  Future<void> _probeDisconnect(BluetoothDevice device, int token) async {
-    await Future.delayed(const Duration(seconds: 2));
-    if (token != _disconnectProbeToken || _characteristic == null) return;
-
-    try {
-      await _discoverServicesWithRetry(
-        device,
-        attempts: 1,
-        initialDelay: Duration.zero,
-      ).timeout(const Duration(seconds: 5));
-      debugPrint(
-        'BLE — Signal disconnect Windows ignoré, GATT encore joignable.',
-      );
-    } catch (_) {
-      _markDisconnected();
-    }
   }
 
   void _markDisconnected() {
