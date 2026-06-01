@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:media_kit/media_kit.dart';
 
 import 'core/config/app_config.dart';
 import 'core/theme/app_theme.dart';
@@ -11,10 +12,11 @@ import 'package:flutter_easyloading_plus/flutter_easyloading_plus.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
 
   await dotenv.load(fileName: ".env");
   await configureDependencies();
-  
+
   // Wire token expiry → show re-login dialog
   AuthInterceptor.onTokenExpired = (context) async {
     await showTokenExpiredDialog(context);
