@@ -289,15 +289,10 @@ class _WorksPanel extends StatelessWidget {
                     ),
                     const Spacer(),
                     if (!state.isSubmitting && !state.allSent)
-<<<<<<< HEAD
-                      FilledButton.icon(
-                        onPressed: () => context.read<BleReceiveWorksBloc>().add(BleReceiveSubmitAllEvent()),
-=======
                       ElevatedButton.icon(
                         onPressed: () => context
                             .read<BleReceiveWorksBloc>()
                             .add(BleReceiveSubmitAllEvent()),
->>>>>>> 93b52ea59744877376b67bdd19210d6e4233491d
                         icon: const Icon(Icons.cloud_upload, size: 16),
                         style: FilledButton.styleFrom(textStyle: TextStyle(fontSize: 12),),
                       
