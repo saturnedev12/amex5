@@ -32,6 +32,7 @@ class BleService extends ChangeNotifier {
   StreamSubscription? _connectionSubscription;
   StreamSubscription? _jsonSubscription;
   StreamSubscription<BluetoothAdapterState>? _adapterStateSubscription;
+  Timer? _scanTimeoutTimer;
 
   BleService(this._repository) {
     _initAdapterState();
@@ -72,6 +73,7 @@ class BleService extends ChangeNotifier {
       if (state != BluetoothAdapterState.on &&
           _connectionState == BleConnectionState.scanning) {
         _connectionState = BleConnectionState.disconnected;
+        _scanTimeoutTimer?.cancel();
       }
       notifyListeners();
     });
@@ -127,6 +129,16 @@ class BleService extends ChangeNotifier {
       _connectionState = BleConnectionState.scanning;
       notifyListeners();
       await _repository.startScan();
+      _scanTimeoutTimer?.cancel();
+      _scanTimeoutTimer = Timer(const Duration(seconds: 26), () {
+        if (_connectionState != BleConnectionState.scanning) return;
+        _connectionState = BleConnectionState.disconnected;
+        if (_scanResults.isEmpty) {
+          _errorMessage =
+              "Aucun appareil RONDEX détecté. Activez le partage Bluetooth sur Android puis relancez la recherche.";
+        }
+        notifyListeners();
+      });
     } catch (e) {
       _connectionState = BleConnectionState.error;
       _errorMessage = e.toString();
@@ -135,6 +147,7 @@ class BleService extends ChangeNotifier {
   }
 
   Future<void> stopScan() async {
+    _scanTimeoutTimer?.cancel();
     await _repository.stopScan();
     if (_connectionState == BleConnectionState.scanning) {
       _connectionState = BleConnectionState.disconnected;
@@ -198,6 +211,7 @@ class BleService extends ChangeNotifier {
     _connectionSubscription?.cancel();
     _jsonSubscription?.cancel();
     _adapterStateSubscription?.cancel();
+    _scanTimeoutTimer?.cancel();
     _repository.dispose();
     super.dispose();
   }

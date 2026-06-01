@@ -20,7 +20,7 @@ abstract class BleRepository {
   /// Se connecte au périphérique et active les notifications JSON.
   Future<void> connectToDevice(BleDeviceEntity device);
 
-  /// Envoie un JSON vers l'Android en découpant en chunks de 250 octets.
+  /// Envoie un JSON vers l'Android avec un chunking adapté au MTU disponible.
   Future<void> sendJson(Map<String, dynamic> data);
 
   /// Déconnecte le périphérique et libère les ressources.
