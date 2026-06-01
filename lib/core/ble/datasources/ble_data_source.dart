@@ -11,16 +11,16 @@ import 'package:injectable/injectable.dart';
 import '../entities/ble_device_entity.dart';
 
 // UUIDs identiques côté Android (serveur) et Windows (client)
-const String _kServiceUuid = '0000ffe0-0000-1000-8000-00805f9b34fb';
-const String _kCharUuid = '0000ffe1-0000-1000-8000-00805f9b34fb';
+const String _kServiceUuid = 'd8f6a510-a37b-4f2d-9f8d-5c7b8d2e4a11';
+const String _kCharUuid = 'd8f6a511-a37b-4f2d-9f8d-5c7b8d2e4a11';
 const String _kMessageIdKey = '_BLE_MESSAGE_ID';
 const String _kAckIdKey = '_BLE_ACK_ID';
 const String _kAckType = 'BLE_ACK';
 const List<String> _kAdvertisingNamePrefixes = ['RDX-', 'RONDEX-'];
 
 /// Comparaison UUID tolérante aux formats retournés par le stack BLE Windows.
-/// win_ble peut retourner : forme courte "ffe0", forme 8-char "0000ffe0",
-/// ou forme complète 128-bit avec/sans accolades et en majuscules.
+/// win_ble peut retourner une forme complète 128-bit avec/sans accolades,
+/// ou une forme courte pour les UUID Bluetooth SIG.
 bool _uuidMatches(Guid uuid, String expected) {
   final raw = uuid
       .toString()
@@ -33,14 +33,14 @@ bool _uuidMatches(Guid uuid, String expected) {
   if (raw == exp) return true;
 
   // Extraire les 4 hex significatifs de l'UUID Bluetooth SIG 128-bit
-  // Ex : "0000ffe0-0000-1000-8000-00805f9b34fb" → "ffe0"
+  // Ex : "0000xxxx-0000-1000-8000-00805f9b34fb" → "xxxx"
   final sigMatch = RegExp(
     r'^0000([0-9a-f]{4})-0000-1000-8000-00805f9b34fb$',
   ).firstMatch(exp);
 
   if (sigMatch != null) {
-    final short4 = sigMatch.group(1)!; // "ffe0"
-    // Accepter : "ffe0", "0000ffe0", "0000ffe0-...", etc.
+    final short4 = sigMatch.group(1)!;
+    // Accepter : "xxxx", "0000xxxx", "0000xxxx-...", etc.
     if (raw == short4) return true;
     if (raw == '0000$short4') return true;
     if (raw.startsWith('0000$short4')) return true;
@@ -322,12 +322,16 @@ class WindowsBleClientDataSource implements BleDataSource {
   void _validateCharacteristic(BluetoothCharacteristic characteristic) {
     final properties = characteristic.properties;
     if (!properties.notify && !properties.indicate) {
-      throw Exception(
-        'La caractéristique BLE ne supporte pas notify/indicate.',
+      debugPrint(
+        'BLE — Propriétés notify/indicate non confirmées par Windows. '
+        'Tentative d’abonnement quand même sur $_kCharUuid.',
       );
     }
     if (!properties.write && !properties.writeWithoutResponse) {
-      throw Exception('La caractéristique BLE ne supporte pas write.');
+      debugPrint(
+        'BLE — Propriétés write non confirmées par Windows. '
+        'Tentative d’écriture avec réponse quand même sur $_kCharUuid.',
+      );
     }
   }
 
