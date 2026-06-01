@@ -66,11 +66,13 @@ extension GetItInjectableX on _i174.GetIt {
     gh.singleton<_i929.TokenProvider>(() => _i929.TokenProvider());
     gh.singleton<_i714.SessionManager>(() => _i714.SessionManager());
     gh.lazySingleton<_i1073.ErrorInterceptor>(() => _i1073.ErrorInterceptor());
-    gh.factory<_i428.BleDataSource>(() => _i428.WindowsBleClientDataSource());
+    gh.lazySingleton<_i428.BleDataSource>(
+      () => _i428.WindowsBleClientDataSource(),
+    );
     gh.lazySingleton<_i715.LoggingInterceptor>(
       () => _i715.LoggingInterceptor(enabled: gh<bool>()),
     );
-    gh.factory<_i927.BleRepository>(
+    gh.lazySingleton<_i927.BleRepository>(
       () => _i928.BleRepositoryImpl(gh<_i428.BleDataSource>()),
     );
     gh.lazySingleton<_i660.AuthInterceptor>(

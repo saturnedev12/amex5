@@ -93,7 +93,7 @@ Future<bool> showBleConnectDialog(BuildContext context) async {
                                 service.connectionState ==
                                         BleConnectionState.scanning
                                     ? 'Recherche en cours...'
-                                    : 'Aucun appareil RONDEX détecté.',
+                                    : 'Aucun appareil RDX/RONDEX détecté.',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: AppColors.textDisabled,

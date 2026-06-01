@@ -50,7 +50,8 @@ bool _uuidMatches(Guid uuid, String expected) {
 
 const int _kDefaultChunkSize = 20;
 const int _kMaxChunkSize = 244;
-const int _kScanSeconds = 25;
+const int _kScanSeconds = 30;
+const Duration _kRemoveIfGone = Duration(seconds: 20);
 const Duration _kAckTimeout = Duration(seconds: 20);
 
 abstract class BleDataSource {
@@ -69,7 +70,7 @@ abstract class BleDataSource {
 /// Implémentation Windows du client BLE via flutter_blue_plus_windows.
 /// Le PC Windows agit en tant que Central (Client) et le smartphone Android
 /// agit en tant que Peripheral (Serveur).
-@Injectable(as: BleDataSource)
+@LazySingleton(as: BleDataSource)
 class WindowsBleClientDataSource implements BleDataSource {
   BluetoothDevice? _connectedDevice;
   BluetoothCharacteristic? _characteristic;
@@ -79,6 +80,7 @@ class WindowsBleClientDataSource implements BleDataSource {
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<List<int>>? _characteristicSubscription;
   StreamSubscription<BluetoothConnectionState>? _connectionStateSubscription;
+  int _disconnectProbeToken = 0;
 
   /// Stocke les BluetoothDevice bruts trouvés lors du scan (clé = remoteId).
   final Map<String, BluetoothDevice> _foundDevicesMap = {};
@@ -113,7 +115,7 @@ class WindowsBleClientDataSource implements BleDataSource {
 
     await FlutterBluePlus.startScan(
       timeout: const Duration(seconds: _kScanSeconds),
-      removeIfGone: const Duration(seconds: 8),
+      removeIfGone: _kRemoveIfGone,
     );
 
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
@@ -191,30 +193,10 @@ class WindowsBleClientDataSource implements BleDataSource {
     _receiveBuffer.clear();
 
     try {
-      await _pairBestEffort(btDevice);
-      await _connectWithRetry(btDevice);
+      final services = await _connectAndDiscoverWithRetry(btDevice);
 
-      debugPrint('BLE — Connecté à ${deviceEntity.name} (${deviceEntity.id})');
-
-      // Surveillance de l'état de connexion
-      await _connectionStateSubscription?.cancel();
-      _connectionStateSubscription = _connectedDevice!.connectionState.listen((
-        state,
-      ) {
-        final connected = state == BluetoothConnectionState.connected;
-        if (!connected) {
-          if (!_connectionController.isClosed) {
-            _connectionController.add(false);
-          }
-          _characteristic = null;
-          _receiveBuffer.clear();
-          debugPrint('BLE — Déconnecté.');
-        }
-      });
-
-      // Découverte des services et abonnement aux notifications
+      debugPrint('BLE — Session GATT ouverte avec ${deviceEntity.name}');
       await _configureWriteChunkSize(btDevice);
-      final services = await _discoverServicesWithRetry(btDevice);
 
       // Debug : afficher tous les services/caractéristiques retournés par Windows
       debugPrint('BLE — ${services.length} service(s) découvert(s) :');
@@ -250,6 +232,7 @@ class WindowsBleClientDataSource implements BleDataSource {
       if (!_connectionController.isClosed) {
         _connectionController.add(true);
       }
+      _startConnectionMonitor(btDevice);
     } catch (_) {
       try {
         await disconnect();
@@ -258,51 +241,55 @@ class WindowsBleClientDataSource implements BleDataSource {
     }
   }
 
-  Future<void> _pairBestEffort(BluetoothDevice device) async {
-    try {
-      await device.createBond(timeout: 20).timeout(const Duration(seconds: 22));
-      await Future.delayed(const Duration(milliseconds: 350));
-    } catch (e) {
-      debugPrint('BLE — Appairage ignoré ou déjà acquis : $e');
-    }
-  }
-
-  Future<void> _connectWithRetry(BluetoothDevice device) async {
-    Object? lastError;
-
-    for (var attempt = 1; attempt <= 3; attempt++) {
-      try {
-        await device.connect(
-          autoConnect: false,
-          timeout: const Duration(seconds: 20),
-        );
-        await device.connectionState
-            .where((state) => state == BluetoothConnectionState.connected)
-            .first
-            .timeout(const Duration(seconds: 10));
-        return;
-      } catch (e) {
-        lastError = e;
-        debugPrint('BLE — Connexion tentative $attempt échouée : $e');
-        try {
-          await device.disconnect();
-        } catch (_) {}
-        await Future.delayed(Duration(milliseconds: 450 * attempt));
-      }
-    }
-
-    throw Exception('Connexion BLE impossible après 3 tentatives : $lastError');
-  }
-
-  Future<List<BluetoothService>> _discoverServicesWithRetry(
+  Future<List<BluetoothService>> _connectAndDiscoverWithRetry(
     BluetoothDevice device,
   ) async {
     Object? lastError;
 
     for (var attempt = 1; attempt <= 3; attempt++) {
       try {
-        await Future.delayed(Duration(milliseconds: 350 * attempt));
-        final services = await device.discoverServices(timeout: 20);
+        try {
+          await device
+              .connect(autoConnect: false, timeout: const Duration(seconds: 6))
+              .timeout(const Duration(seconds: 6));
+        } catch (e) {
+          debugPrint(
+            'BLE — WinBle.connect tentative $attempt sans confirmation : $e',
+          );
+        }
+
+        final services = await _discoverServicesWithRetry(device);
+        return services;
+      } catch (e) {
+        lastError = e;
+        debugPrint('BLE — Session GATT tentative $attempt échouée : $e');
+        try {
+          await device.disconnect();
+        } catch (_) {}
+        await Future.delayed(Duration(milliseconds: 700 * attempt));
+      }
+    }
+
+    throw Exception(
+      'Session GATT BLE impossible après 3 tentatives : $lastError',
+    );
+  }
+
+  Future<List<BluetoothService>> _discoverServicesWithRetry(
+    BluetoothDevice device, {
+    int attempts = 3,
+    Duration? initialDelay,
+  }) async {
+    Object? lastError;
+
+    for (var attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        await Future.delayed(
+          initialDelay ?? Duration(milliseconds: 350 * attempt),
+        );
+        final services = await device
+            .discoverServices(timeout: 8)
+            .timeout(const Duration(seconds: 8));
         final hasTargetService = services.any(
           (service) => _uuidMatches(service.uuid, _kServiceUuid),
         );
@@ -344,17 +331,68 @@ class WindowsBleClientDataSource implements BleDataSource {
     }
   }
 
+  void _startConnectionMonitor(BluetoothDevice device) {
+    unawaited(_connectionStateSubscription?.cancel());
+    _connectionStateSubscription = device.connectionState.listen((state) {
+      if (state == BluetoothConnectionState.connected) return;
+      final token = ++_disconnectProbeToken;
+      unawaited(_probeDisconnect(device, token));
+    });
+  }
+
+  Future<void> _probeDisconnect(BluetoothDevice device, int token) async {
+    await Future.delayed(const Duration(seconds: 2));
+    if (token != _disconnectProbeToken || _characteristic == null) return;
+
+    try {
+      await _discoverServicesWithRetry(
+        device,
+        attempts: 1,
+        initialDelay: Duration.zero,
+      ).timeout(const Duration(seconds: 5));
+      debugPrint(
+        'BLE — Signal disconnect Windows ignoré, GATT encore joignable.',
+      );
+    } catch (_) {
+      _markDisconnected();
+    }
+  }
+
+  void _markDisconnected() {
+    unawaited(_characteristicSubscription?.cancel());
+    _characteristicSubscription = null;
+    unawaited(_connectionStateSubscription?.cancel());
+    _connectionStateSubscription = null;
+    _connectedDevice = null;
+    _characteristic = null;
+    _receiveBuffer.clear();
+    if (!_connectionController.isClosed) {
+      _connectionController.add(false);
+    }
+    debugPrint('BLE — Déconnecté.');
+  }
+
   // ── Réception (Android → Windows) ────────────────────────────────────────
 
   Future<void> _subscribeToNotifications() async {
     await _characteristicSubscription?.cancel();
-    await _characteristic!.setNotifyValue(true);
 
     _characteristicSubscription = _characteristic!.onValueReceived.listen((
       bytes,
     ) {
       if (bytes.isNotEmpty) _processChunk(bytes);
     }, onError: (Object e) => debugPrint('BLE — Erreur notification : $e'));
+
+    await _characteristic!
+        .setNotifyValue(true)
+        .timeout(const Duration(seconds: 8));
+    if (!_characteristic!.isNotifying) {
+      await _characteristicSubscription?.cancel();
+      _characteristicSubscription = null;
+      throw Exception(
+        "Abonnement notifications BLE impossible. La session GATT Windows n'est pas prête.",
+      );
+    }
 
     debugPrint('BLE — Écoute des notifications activée sur $_kCharUuid');
   }
@@ -513,9 +551,7 @@ class WindowsBleClientDataSource implements BleDataSource {
     _connectionStateSubscription = null;
 
     await _connectedDevice?.disconnect();
-    _connectedDevice = null;
-    _characteristic = null;
-    _receiveBuffer.clear();
+    _markDisconnected();
   }
 
   // ── Nettoyage ─────────────────────────────────────────────────────────────

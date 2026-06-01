@@ -130,12 +130,12 @@ class BleService extends ChangeNotifier {
       notifyListeners();
       await _repository.startScan();
       _scanTimeoutTimer?.cancel();
-      _scanTimeoutTimer = Timer(const Duration(seconds: 26), () {
+      _scanTimeoutTimer = Timer(const Duration(seconds: 31), () {
         if (_connectionState != BleConnectionState.scanning) return;
         _connectionState = BleConnectionState.disconnected;
         if (_scanResults.isEmpty) {
           _errorMessage =
-              "Aucun appareil RONDEX détecté. Activez le partage Bluetooth sur Android puis relancez la recherche.";
+              "Aucun appareil RDX/RONDEX détecté. Activez le partage Bluetooth sur Android puis relancez la recherche.";
         }
         notifyListeners();
       });
