@@ -1,6 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
 import '../di/injection.dart';
 import '../theme/app_theme.dart';
@@ -12,7 +13,7 @@ Future<bool> showBleConnectDialog(BuildContext context) async {
 
   // Démarrer le scan automatiquement à l'ouverture
   if (!service.isConnected) {
-    service.startScan();
+    unawaited(service.startScan());
   }
 
   final result = await showDialog<bool>(
@@ -39,9 +40,13 @@ Future<bool> showBleConnectDialog(BuildContext context) async {
                   ),
                 ),
 
-                IconButton(onPressed: (){
-                   Navigator.of(context).pop(false);
-                }, icon:Icon(CupertinoIcons.xmark_circle_fill))
+                IconButton(
+                  onPressed: () async {
+                    await service.stopScan();
+                    if (context.mounted) Navigator.of(context).pop(false);
+                  },
+                  icon: const Icon(CupertinoIcons.xmark_circle_fill),
+                ),
               ],
             ),
             content: SizedBox(
@@ -51,22 +56,14 @@ Future<bool> showBleConnectDialog(BuildContext context) async {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (service.connectionState == BleConnectionState.error) ...[
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.error.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: AppColors.error),
-                      ),
-                      child: Text(
-                        service.errorMessage ?? 'Erreur inconnue',
-                        style: const TextStyle(
-                          color: AppColors.error,
-                          fontSize: 12,
-                        ),
-                      ),
+                    _BleDialogMessage(
+                      message: service.errorMessage ?? 'Erreur inconnue',
+                      isError: true,
                     ),
+                  ] else if (service.errorMessage != null &&
+                      service.connectionState !=
+                          BleConnectionState.connected) ...[
+                    _BleDialogMessage(message: service.errorMessage!),
                   ],
                   if (service.connectionState ==
                       BleConnectionState.connecting) ...[
@@ -91,10 +88,14 @@ Future<bool> showBleConnectDialog(BuildContext context) async {
                   ] else ...[
                     Expanded(
                       child: service.scanResults.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
-                                'Recherche en cours...',
-                                style: TextStyle(
+                                service.connectionState ==
+                                        BleConnectionState.scanning
+                                    ? 'Recherche en cours...'
+                                    : 'Aucun appareil RONDEX détecté.',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
                                   color: AppColors.textDisabled,
                                   fontSize: 12,
                                 ),
@@ -121,7 +122,25 @@ Future<bool> showBleConnectDialog(BuildContext context) async {
                 ],
               ),
             ),
-     
+            actions: [
+              TextButton.icon(
+                onPressed:
+                    service.connectionState == BleConnectionState.scanning ||
+                        service.connectionState == BleConnectionState.connecting
+                    ? null
+                    : () => unawaited(service.startScan()),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Relancer'),
+              ),
+              TextButton.icon(
+                onPressed:
+                    service.connectionState == BleConnectionState.scanning
+                    ? () => unawaited(service.stopScan())
+                    : null,
+                icon: const Icon(Icons.stop_rounded, size: 16),
+                label: const Text('Stop'),
+              ),
+            ],
           );
         },
       );
@@ -129,4 +148,27 @@ Future<bool> showBleConnectDialog(BuildContext context) async {
   );
 
   return result ?? false;
+}
+
+class _BleDialogMessage extends StatelessWidget {
+  const _BleDialogMessage({required this.message, this.isError = false});
+
+  final String message;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isError ? AppColors.error : AppColors.warning;
+
+    return Container(
+      padding: const EdgeInsets.all(8),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: color),
+      ),
+      child: Text(message, style: TextStyle(color: color, fontSize: 12)),
+    );
+  }
 }

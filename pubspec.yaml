@@ -38,7 +38,7 @@ dependencies:
   dio: ^5.9.2
   flutter_bloc: ^9.1.1
   shared_preferences: ^2.5.4
-  #flutter_blue_plus_windows: 1.26.1
+  flutter_blue_plus_windows: 1.26.1
   isar_community: ^3.3.2
   isar_community_flutter_libs: ^3.3.2
   json_annotation: ^4.11.0

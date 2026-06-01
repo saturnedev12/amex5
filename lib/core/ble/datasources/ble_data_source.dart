@@ -13,6 +13,7 @@ import '../entities/ble_device_entity.dart';
 // UUIDs identiques côté Android (serveur) et Windows (client)
 const String _kServiceUuid = '0000ffe0-0000-1000-8000-00805f9b34fb';
 const String _kCharUuid = '0000ffe1-0000-1000-8000-00805f9b34fb';
+const List<String> _kAdvertisingNamePrefixes = ['RDX-', 'RONDEX-'];
 
 /// Comparaison UUID tolérante aux formats retournés par le stack BLE Windows.
 /// win_ble peut retourner : forme courte "ffe0", forme 8-char "0000ffe0",
@@ -44,8 +45,9 @@ bool _uuidMatches(Guid uuid, String expected) {
   return false;
 }
 
-const int _kChunkSize = 250;
-const int _kChunkDelayMs = 30;
+const int _kDefaultChunkSize = 20;
+const int _kMaxChunkSize = 244;
+const int _kScanSeconds = 25;
 
 abstract class BleDataSource {
   Stream<List<BleDeviceEntity>> get scanResultsStream;
@@ -67,6 +69,7 @@ abstract class BleDataSource {
 class WindowsBleClientDataSource implements BleDataSource {
   BluetoothDevice? _connectedDevice;
   BluetoothCharacteristic? _characteristic;
+  int _writeChunkSize = _kDefaultChunkSize;
 
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<List<int>>? _characteristicSubscription;
@@ -99,29 +102,64 @@ class WindowsBleClientDataSource implements BleDataSource {
   Future<void> startScan() async {
     _foundDevicesMap.clear();
     await _scanSubscription?.cancel();
+    await FlutterBluePlus.stopScan();
+    if (!_scanController.isClosed) _scanController.add(const []);
 
     await FlutterBluePlus.startScan(
-      withServices: [Guid(_kServiceUuid)],
-      timeout: const Duration(seconds: 15),
+      timeout: const Duration(seconds: _kScanSeconds),
+      removeIfGone: const Duration(seconds: 8),
     );
 
     _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
+      final entitiesById = <String, BleDeviceEntity>{};
+
       for (final r in results) {
-        _foundDevicesMap[r.device.remoteId.toString()] = r.device;
+        if (!_isExpectedAndroidPeripheral(r)) continue;
+
+        final id = r.device.remoteId.toString();
+        _foundDevicesMap[id] = r.device;
+        entitiesById[id] = BleDeviceEntity(
+          id: id,
+          name: _displayNameForScanResult(r),
+          rssi: r.rssi,
+        );
       }
-      final entities = results
-          .map(
-            (r) => BleDeviceEntity(
-              id: r.device.remoteId.toString(),
-              name: r.device.platformName.isNotEmpty
-                  ? r.device.platformName
-                  : 'Appareil BLE',
-              rssi: r.rssi,
-            ),
-          )
-          .toList();
+
+      final entities = entitiesById.values.toList()
+        ..sort((a, b) => b.rssi.compareTo(a.rssi));
+
       if (!_scanController.isClosed) _scanController.add(entities);
     }, onError: (Object e) => debugPrint('BLE — Erreur scan : $e'));
+  }
+
+  bool _isExpectedAndroidPeripheral(ScanResult result) {
+    final serviceMatch = result.advertisementData.serviceUuids.any(
+      (uuid) => _uuidMatches(uuid, _kServiceUuid),
+    );
+    if (serviceMatch) return true;
+
+    final names = <String>{
+      result.advertisementData.advName.trim(),
+      result.device.platformName.trim(),
+    }..removeWhere((name) => name.isEmpty);
+
+    return names.any(
+      (name) => _kAdvertisingNamePrefixes.any(
+        (prefix) => name.toUpperCase().startsWith(prefix),
+      ),
+    );
+  }
+
+  String _displayNameForScanResult(ScanResult result) {
+    final advName = result.advertisementData.advName.trim();
+    if (advName.isNotEmpty) return advName;
+
+    final platformName = result.device.platformName.trim();
+    if (platformName.isNotEmpty) return platformName;
+
+    final id = result.device.remoteId.toString();
+    final suffix = id.length <= 5 ? id : id.substring(id.length - 5);
+    return 'RONDEX $suffix';
   }
 
   @override
@@ -144,57 +182,155 @@ class WindowsBleClientDataSource implements BleDataSource {
 
     await stopScan();
     _connectedDevice = btDevice;
-    await _connectedDevice!.connect(autoConnect: false);
+    _receiveBuffer.clear();
 
-    debugPrint('BLE — Connecté à ${deviceEntity.name} (${deviceEntity.id})');
+    try {
+      await _pairBestEffort(btDevice);
+      await _connectWithRetry(btDevice);
 
-    // Surveillance de l'état de connexion
-    await _connectionStateSubscription?.cancel();
-    _connectionStateSubscription = _connectedDevice!.connectionState.listen((
-      state,
-    ) {
-      final connected = state == BluetoothConnectionState.connected;
-      if (!_connectionController.isClosed) {
-        _connectionController.add(connected);
-      }
-      if (!connected) {
-        _characteristic = null;
-        _receiveBuffer.clear();
-        debugPrint('BLE — Déconnecté.');
-      }
-    });
+      debugPrint('BLE — Connecté à ${deviceEntity.name} (${deviceEntity.id})');
 
-    // Découverte des services et abonnement aux notifications
-    final services = await _connectedDevice!.discoverServices();
-
-    // Debug : afficher tous les services/caractéristiques retournés par Windows
-    debugPrint('BLE — ${services.length} service(s) découvert(s) :');
-    for (final svc in services) {
-      debugPrint('  ├─ Service : ${svc.uuid}');
-      for (final chr in svc.characteristics) {
-        debugPrint('  │   └─ Char : ${chr.uuid}  props=${chr.properties}');
-      }
-    }
-
-    for (final svc in services) {
-      if (_uuidMatches(svc.uuid, _kServiceUuid)) {
-        debugPrint('BLE — Service cible trouvé : ${svc.uuid}');
-        for (final chr in svc.characteristics) {
-          if (_uuidMatches(chr.uuid, _kCharUuid)) {
-            _characteristic = chr;
-            debugPrint('BLE — Caractéristique cible trouvée : ${chr.uuid}');
-            await _subscribeToNotifications();
-            break;
-          }
+      // Surveillance de l'état de connexion
+      await _connectionStateSubscription?.cancel();
+      _connectionStateSubscription = _connectedDevice!.connectionState.listen((
+        state,
+      ) {
+        final connected = state == BluetoothConnectionState.connected;
+        if (!_connectionController.isClosed) {
+          _connectionController.add(connected);
         }
-        break;
+        if (!connected) {
+          _characteristic = null;
+          _receiveBuffer.clear();
+          debugPrint('BLE — Déconnecté.');
+        }
+      });
+
+      // Découverte des services et abonnement aux notifications
+      await _configureWriteChunkSize(btDevice);
+      final services = await _discoverServicesWithRetry(btDevice);
+
+      // Debug : afficher tous les services/caractéristiques retournés par Windows
+      debugPrint('BLE — ${services.length} service(s) découvert(s) :');
+      for (final svc in services) {
+        debugPrint('  ├─ Service : ${svc.uuid}');
+        for (final chr in svc.characteristics) {
+          debugPrint('  │   └─ Char : ${chr.uuid}  props=${chr.properties}');
+        }
+      }
+
+      for (final svc in services) {
+        if (_uuidMatches(svc.uuid, _kServiceUuid)) {
+          debugPrint('BLE — Service cible trouvé : ${svc.uuid}');
+          for (final chr in svc.characteristics) {
+            if (_uuidMatches(chr.uuid, _kCharUuid)) {
+              _characteristic = chr;
+              debugPrint('BLE — Caractéristique cible trouvée : ${chr.uuid}');
+              _validateCharacteristic(chr);
+              await _subscribeToNotifications();
+              break;
+            }
+          }
+          break;
+        }
+      }
+
+      if (_characteristic == null) {
+        throw Exception(
+          'Caractéristique BLE ($_kCharUuid) introuvable sur le serveur Android.',
+        );
+      }
+    } catch (_) {
+      try {
+        await disconnect();
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
+  Future<void> _pairBestEffort(BluetoothDevice device) async {
+    try {
+      await device.createBond(timeout: 20).timeout(const Duration(seconds: 22));
+      await Future.delayed(const Duration(milliseconds: 350));
+    } catch (e) {
+      debugPrint('BLE — Appairage ignoré ou déjà acquis : $e');
+    }
+  }
+
+  Future<void> _connectWithRetry(BluetoothDevice device) async {
+    Object? lastError;
+
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await device.connect(
+          autoConnect: false,
+          timeout: const Duration(seconds: 20),
+        );
+        await device.connectionState
+            .where((state) => state == BluetoothConnectionState.connected)
+            .first
+            .timeout(const Duration(seconds: 10));
+        return;
+      } catch (e) {
+        lastError = e;
+        debugPrint('BLE — Connexion tentative $attempt échouée : $e');
+        try {
+          await device.disconnect();
+        } catch (_) {}
+        await Future.delayed(Duration(milliseconds: 450 * attempt));
       }
     }
 
-    if (_characteristic == null) {
+    throw Exception('Connexion BLE impossible après 3 tentatives : $lastError');
+  }
+
+  Future<List<BluetoothService>> _discoverServicesWithRetry(
+    BluetoothDevice device,
+  ) async {
+    Object? lastError;
+
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await Future.delayed(Duration(milliseconds: 350 * attempt));
+        final services = await device.discoverServices(timeout: 20);
+        final hasTargetService = services.any(
+          (service) => _uuidMatches(service.uuid, _kServiceUuid),
+        );
+        if (hasTargetService) return services;
+        lastError = 'service $_kServiceUuid absent';
+      } catch (e) {
+        lastError = e;
+      }
+      debugPrint('BLE — Découverte services tentative $attempt échouée.');
+    }
+
+    throw Exception('Service BLE cible introuvable : $lastError');
+  }
+
+  Future<void> _configureWriteChunkSize(BluetoothDevice device) async {
+    _writeChunkSize = _kDefaultChunkSize;
+    try {
+      final mtu = await device
+          .requestMtu(512)
+          .timeout(const Duration(seconds: 3));
+      _writeChunkSize = (mtu - 3)
+          .clamp(_kDefaultChunkSize, _kMaxChunkSize)
+          .toInt();
+      debugPrint('BLE — MTU Windows=$mtu, chunks écriture=$_writeChunkSize');
+    } catch (e) {
+      debugPrint('BLE — MTU indisponible, chunks écriture=20 octets : $e');
+    }
+  }
+
+  void _validateCharacteristic(BluetoothCharacteristic characteristic) {
+    final properties = characteristic.properties;
+    if (!properties.notify && !properties.indicate) {
       throw Exception(
-        'Caractéristique BLE ($_kCharUuid) introuvable sur le serveur Android.',
+        'La caractéristique BLE ne supporte pas notify/indicate.',
       );
+    }
+    if (!properties.write && !properties.writeWithoutResponse) {
+      throw Exception('La caractéristique BLE ne supporte pas write.');
     }
   }
 
@@ -204,7 +340,7 @@ class WindowsBleClientDataSource implements BleDataSource {
     await _characteristicSubscription?.cancel();
     await _characteristic!.setNotifyValue(true);
 
-    _characteristicSubscription = _characteristic!.lastValueStream.listen((
+    _characteristicSubscription = _characteristic!.onValueReceived.listen((
       bytes,
     ) {
       if (bytes.isNotEmpty) _processChunk(bytes);
@@ -244,8 +380,6 @@ class WindowsBleClientDataSource implements BleDataSource {
 
   // ── Envoi (Windows → Android) ─────────────────────────────────────────────
 
-  // ── Envoi (Windows → Android) ─────────────────────────────────────────────
-
   @override
   Future<void> sendJson(Map<String, dynamic> data) async {
     if (_characteristic == null) {
@@ -258,9 +392,13 @@ class WindowsBleClientDataSource implements BleDataSource {
     EasyLoading.showProgress(0.0, status: 'Envoi des données...');
 
     try {
-      for (int i = 0; i < bytes.length; i += _kChunkSize) {
-        final end = (i + _kChunkSize < bytes.length)
-            ? i + _kChunkSize
+      final withoutResponse =
+          !_characteristic!.properties.write &&
+          _characteristic!.properties.writeWithoutResponse;
+
+      for (int i = 0; i < bytes.length; i += _writeChunkSize) {
+        final end = (i + _writeChunkSize < bytes.length)
+            ? i + _writeChunkSize
             : bytes.length;
 
         // OPTIMISATION : En conservant withoutResponse: false, on s'assure que
@@ -268,11 +406,14 @@ class WindowsBleClientDataSource implements BleDataSource {
         // Le Future "await" joue lui-même le rôle de régulateur (throttle).
         await _characteristic!.write(
           bytes.sublist(i, end),
-          withoutResponse: false,
+          withoutResponse: withoutResponse,
         );
 
         final progress = end / bytes.length;
-        EasyLoading.showProgress(progress.clamp(0.0, 1.0), status: 'Envoi des données...');
+        EasyLoading.showProgress(
+          progress.clamp(0.0, 1.0),
+          status: 'Envoi des données...',
+        );
 
         // OPTIMISATION : Suppression du Future.delayed inutile qui bridait les performances
         // car le withoutResponse: false impose déjà une attente synchrone.
