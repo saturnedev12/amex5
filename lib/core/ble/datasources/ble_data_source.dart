@@ -13,6 +13,9 @@ import '../entities/ble_device_entity.dart';
 // UUIDs identiques côté Android (serveur) et Windows (client)
 const String _kServiceUuid = '0000ffe0-0000-1000-8000-00805f9b34fb';
 const String _kCharUuid = '0000ffe1-0000-1000-8000-00805f9b34fb';
+const String _kMessageIdKey = '_BLE_MESSAGE_ID';
+const String _kAckIdKey = '_BLE_ACK_ID';
+const String _kAckType = 'BLE_ACK';
 const List<String> _kAdvertisingNamePrefixes = ['RDX-', 'RONDEX-'];
 
 /// Comparaison UUID tolérante aux formats retournés par le stack BLE Windows.
@@ -48,6 +51,7 @@ bool _uuidMatches(Guid uuid, String expected) {
 const int _kDefaultChunkSize = 20;
 const int _kMaxChunkSize = 244;
 const int _kScanSeconds = 25;
+const Duration _kAckTimeout = Duration(seconds: 20);
 
 abstract class BleDataSource {
   Stream<List<BleDeviceEntity>> get scanResultsStream;
@@ -70,6 +74,7 @@ class WindowsBleClientDataSource implements BleDataSource {
   BluetoothDevice? _connectedDevice;
   BluetoothCharacteristic? _characteristic;
   int _writeChunkSize = _kDefaultChunkSize;
+  int _messageSequence = 0;
 
   StreamSubscription<List<ScanResult>>? _scanSubscription;
   StreamSubscription<List<int>>? _characteristicSubscription;
@@ -84,6 +89,7 @@ class WindowsBleClientDataSource implements BleDataSource {
   final _scanController = StreamController<List<BleDeviceEntity>>.broadcast();
   final _jsonController = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionController = StreamController<bool>.broadcast();
+  final _ackController = StreamController<String>.broadcast();
 
   // ── Streams publics ───────────────────────────────────────────────────────
 
@@ -196,10 +202,10 @@ class WindowsBleClientDataSource implements BleDataSource {
         state,
       ) {
         final connected = state == BluetoothConnectionState.connected;
-        if (!_connectionController.isClosed) {
-          _connectionController.add(connected);
-        }
         if (!connected) {
+          if (!_connectionController.isClosed) {
+            _connectionController.add(false);
+          }
           _characteristic = null;
           _receiveBuffer.clear();
           debugPrint('BLE — Déconnecté.');
@@ -239,6 +245,10 @@ class WindowsBleClientDataSource implements BleDataSource {
         throw Exception(
           'Caractéristique BLE ($_kCharUuid) introuvable sur le serveur Android.',
         );
+      }
+
+      if (!_connectionController.isClosed) {
+        _connectionController.add(true);
       }
     } catch (_) {
       try {
@@ -368,8 +378,21 @@ class WindowsBleClientDataSource implements BleDataSource {
       debugPrint(
         'BLE — JSON reçu et assemblé (${_receiveBuffer.length} octets)',
       );
-      if (!_jsonController.isClosed) _jsonController.add(json);
       _receiveBuffer.clear();
+
+      final ackId = json[_kAckIdKey]?.toString();
+      if (json['TYPE'] == _kAckType && ackId != null && ackId.isNotEmpty) {
+        if (!_ackController.isClosed) _ackController.add(ackId);
+        return;
+      }
+
+      final messageId = json[_kMessageIdKey]?.toString();
+      if (messageId != null && messageId.isNotEmpty) {
+        json.remove(_kMessageIdKey);
+        unawaited(_sendAck(messageId));
+      }
+
+      if (!_jsonController.isClosed) _jsonController.add(json);
     } on FormatException {
       // JSON ou UTF-8 incomplet → attendre le prochain chunk
     } catch (e) {
@@ -386,12 +409,17 @@ class WindowsBleClientDataSource implements BleDataSource {
       throw Exception("Impossible d'envoyer : aucune connexion BLE active.");
     }
 
-    final bytes = utf8.encode(jsonEncode(data));
+    final messageId = _nextMessageId();
+    final document = Map<String, dynamic>.from(data)
+      ..putIfAbsent(_kMessageIdKey, () => messageId);
+    Future<void>? ackFuture;
+    final bytes = utf8.encode(jsonEncode(document));
     debugPrint('BLE — Envoi de ${bytes.length} octets vers Android...');
 
     EasyLoading.showProgress(0.0, status: 'Envoi des données...');
 
     try {
+      ackFuture = _waitForAck(messageId);
       final withoutResponse =
           !_characteristic!.properties.write &&
           _characteristic!.properties.writeWithoutResponse;
@@ -419,9 +447,59 @@ class WindowsBleClientDataSource implements BleDataSource {
         // car le withoutResponse: false impose déjà une attente synchrone.
       }
 
+      await ackFuture;
       debugPrint('BLE — Transmission complète vers Android.');
+    } catch (e) {
+      if (ackFuture != null) {
+        unawaited(ackFuture.catchError((Object _) {}));
+      }
+      rethrow;
     } finally {
       EasyLoading.dismiss();
+    }
+  }
+
+  String _nextMessageId() {
+    _messageSequence++;
+    return "${DateTime.now().microsecondsSinceEpoch}-$_messageSequence";
+  }
+
+  Future<void> _waitForAck(String messageId) async {
+    await _ackController.stream
+        .where((ackId) => ackId == messageId)
+        .first
+        .timeout(
+          _kAckTimeout,
+          onTimeout: () => throw TimeoutException(
+            "Android n'a pas accusé réception du message BLE.",
+            _kAckTimeout,
+          ),
+        );
+  }
+
+  Future<void> _sendAck(String messageId) async {
+    final characteristic = _characteristic;
+    if (characteristic == null) return;
+
+    try {
+      final bytes = utf8.encode(
+        jsonEncode({'TYPE': _kAckType, _kAckIdKey: messageId}),
+      );
+      final withoutResponse =
+          !characteristic.properties.write &&
+          characteristic.properties.writeWithoutResponse;
+
+      for (int i = 0; i < bytes.length; i += _writeChunkSize) {
+        final end = (i + _writeChunkSize < bytes.length)
+            ? i + _writeChunkSize
+            : bytes.length;
+        await characteristic.write(
+          bytes.sublist(i, end),
+          withoutResponse: withoutResponse,
+        );
+      }
+    } catch (e) {
+      debugPrint('BLE — ACK impossible pour $messageId : $e');
     }
   }
 
@@ -452,5 +530,6 @@ class WindowsBleClientDataSource implements BleDataSource {
     if (!_scanController.isClosed) _scanController.close();
     if (!_jsonController.isClosed) _jsonController.close();
     if (!_connectionController.isClosed) _connectionController.close();
+    if (!_ackController.isClosed) _ackController.close();
   }
 }
