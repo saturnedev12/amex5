@@ -1,0 +1,15 @@
+
+[log] AlreadyPaired
+[log] {device: 4c:69:70:bb:57:1d, connected: false} - event
+[log] {4c:69:70:bb:57:1d: false} - map
+[log] {device: 4c:69:70:bb:57:1d, connected: false} - event
+[log] {4c:69:70:bb:57:1d: false} - map
+[log] {device: 4c:69:70:bb:57:1d, connected: false} - event
+[log] {4c:69:70:bb:57:1d: false} - map
+[log] {device: 4c:69:70:bb:57:1d, connected: false} - event
+[log] {4c:69:70:bb:57:1d: false} - map
+[log] {device: 4c:69:70:bb:57:1d, connected: false} - event
+[log] {4c:69:70:bb:57:1d: false} - map
+[log] {device: 4c:69:70:bb:57:1d, connected: false} - event
+[log] {4c:69:70:bb:57:1d: false} - map
+BLE — Connexion tentative 1 échouée : TimeoutException after 0:00:10.000000: Future not completed
