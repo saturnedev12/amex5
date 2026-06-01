@@ -383,18 +383,36 @@ class WindowsBleClientDataSource implements BleDataSource {
       if (bytes.isNotEmpty) _processChunk(bytes);
     }, onError: (Object e) => debugPrint('BLE — Erreur notification : $e'));
 
-    await _characteristic!
-        .setNotifyValue(true)
-        .timeout(const Duration(seconds: 8));
-    if (!_characteristic!.isNotifying) {
-      await _characteristicSubscription?.cancel();
-      _characteristicSubscription = null;
-      throw Exception(
-        "Abonnement notifications BLE impossible. La session GATT Windows n'est pas prête.",
-      );
-    }
+    await _enableNotificationsWithRetry();
 
     debugPrint('BLE — Écoute des notifications activée sur $_kCharUuid');
+  }
+
+  Future<void> _enableNotificationsWithRetry() async {
+    Object? lastError;
+    for (var attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await _characteristic!
+            .setNotifyValue(true)
+            .timeout(const Duration(seconds: 8));
+        if (_characteristic!.isNotifying) return;
+        lastError = 'isNotifying=false';
+      } catch (e) {
+        lastError = e;
+      }
+
+      debugPrint(
+        'BLE — Abonnement notify tentative $attempt incertain : $lastError',
+      );
+      await Future.delayed(Duration(milliseconds: 350 * attempt));
+    }
+
+    if (!_characteristic!.isNotifying) {
+      debugPrint(
+        "BLE — Abonnement notify non confirmé par le package Windows. "
+        "La session GATT reste ouverte, l'ACK applicatif validera la réception réelle.",
+      );
+    }
   }
 
   /// Accumule les chunks entrants et émet un JSON complet une fois assemblé.
